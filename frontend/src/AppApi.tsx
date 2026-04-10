@@ -19,6 +19,15 @@ export const login = async (csrfToken: string, username: string, password: strin
   return response.data
 }
 
+export const register = async (csrfToken: string, username: string, email: string, password: string) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/register/`, { username, email, password }, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
+  return response.data
+}
+
 export const logout = async (csrfToken: string, deviceId: string) => {
   await axios.post(`${API_ENDPOINT_BASE}/api/logout/`, {
     'device_id': deviceId

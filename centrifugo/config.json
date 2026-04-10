@@ -47,7 +47,7 @@
       "name": "postgresql",
       "type": "postgresql",
       "postgresql": {
-        "dsn": "postgresql://grandchat:grandchat@db:5432/grandchat",
+        "dsn": "postgresql://grandchat:grandchat@db:5432/grandchat?sslmode=disable",
         "outbox_table_name": "chat_outbox",
         "num_partitions": 1,
         "partition_select_limit": 100,
