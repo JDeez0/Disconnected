@@ -48,9 +48,6 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ children, realTimeStatus, unrec
         <NavLink to={`/search`} className={({ isActive }) => isActive ? "navbar-active-link" : ""}>Discover</NavLink>
         <NavLink to={`/friends`} className={({ isActive }) => isActive ? "navbar-active-link" : ""}>Friends</NavLink>
         <span id="profile-container">
-          <span id="status" className={'status-'+ realTimeStatus}>{realTimeStatus}</span>
-          &nbsp;
-          &nbsp;
           <button 
             id="profile-button"
             onClick={handleProfileClick}
