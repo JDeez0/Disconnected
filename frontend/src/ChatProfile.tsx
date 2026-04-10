@@ -638,7 +638,7 @@ const ChatProfile: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             background: '#4CAF50',
             color: 'white',
             border: 'none',
-            borderRadius: 4px,
+            borderRadius: '4px',
             cursor: 'pointer',
             fontSize: '14px'
           }}
