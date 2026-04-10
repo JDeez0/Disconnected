@@ -6,7 +6,10 @@ from .views import (
     SearchUsersView, FriendsListView, FriendRequestsView,
     SendFriendRequestView, AcceptFriendRequestView, RejectFriendRequestView,
     CancelFriendRequestView, UnfriendView, BlockUserView, UnblockUserView,
-    BlockedUsersView, SetUserStatusView, GetUserStatusView
+    BlockedUsersView, SetUserStatusView, GetUserStatusView,
+    GetAvailableColorsView, CurrentActivityView, ClearActivityView,
+    GetUserActivityView, ActivityPresetListView, ActivityPresetDetailView,
+    ApplyActivityPresetView, GetUserRoomsView
 )
 
 
@@ -33,4 +36,14 @@ urlpatterns = [
     path('friends/blocked/', BlockedUsersView.as_view(), name='blocked-users'),
     path('friends/status/set/', SetUserStatusView.as_view(), name='set-user-status'),
     path('friends/status/<int:user_id>/', GetUserStatusView.as_view(), name='get-user-status'),
+
+    # Activity endpoints
+    path('activity/colors/', GetAvailableColorsView.as_view(), name='activity-colors'),
+    path('activity/current/', CurrentActivityView.as_view(), name='current-activity'),
+    path('activity/clear/', ClearActivityView.as_view(), name='clear-activity'),
+    path('activity/user/<int:user_id>/', GetUserActivityView.as_view(), name='get-user-activity'),
+    path('activity/presets/', ActivityPresetListView.as_view(), name='activity-presets'),
+    path('activity/presets/<int:preset_id>/', ActivityPresetDetailView.as_view(), name='activity-preset-detail'),
+    path('activity/presets/<int:preset_id>/apply/', ApplyActivityPresetView.as_view(), name='apply-activity-preset'),
+    path('activity/rooms/', GetUserRoomsView.as_view(), name='user-rooms'),
 ]

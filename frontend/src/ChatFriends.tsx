@@ -1,16 +1,22 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   searchUsers, getFriends, getFriendRequests, sendFriendRequest,
   acceptFriendRequest, rejectFriendRequest, cancelFriendRequest,
-  unfriend, blockUser, unblockUser, setUserStatus, getBlockedUsers
+  unfriend, blockUser, unblockUser, getBlockedUsers,
+  getAvailableColors, getCurrentActivity, setCurrentActivity,
+  updateCurrentActivity, clearActivity, getActivityPresets,
+  createActivityPreset, deleteActivityPreset, applyActivityPreset,
+  getUserRooms
 } from './AppApi';
 import CsrfContext from './CsrfContext';
 
 interface User {
   id: number;
   username: string;
-  status: string;
-  custom_status: string | null;
+  activity: {
+    name: string;
+    color: string;
+  } | null;
   is_online: boolean;
   is_friend: boolean;
   has_pending_request: boolean;
@@ -28,12 +34,6 @@ interface FriendRequest {
 interface Friend {
   id: number;
   friend: User;
-  friend_status: {
-    status: string;
-    is_online: boolean;
-    custom_status: string | null;
-    last_seen: string | null;
-  };
   created_at: string;
 }
 
@@ -43,25 +43,64 @@ interface BlockedUser {
   created_at: string;
 }
 
+interface Activity {
+  id: number;
+  name: string;
+  color: string;
+  visibility_type: 'all_friends' | 'specific_rooms';
+  visible_room_ids: number[];
+  room_names: string[];
+  duration_type: 'hour' | 'day' | 'indefinite';
+  expires_at: string | null;
+  is_expired: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ActivityPreset {
+  id: number;
+  name: string;
+  color: string;
+  created_at: string;
+}
+
+interface UserRoom {
+  id: number;
+  name: string;
+}
+
 const ChatFriends: React.FC = () => {
-  const csrf = React.useContext(CsrfContext);
+  const csrf = useContext(CsrfContext);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
   const [loading, setLoading] = useState(false);
-  const [myStatus, setMyStatus] = useState<'online' | 'away' | 'busy' | 'offline'>('online');
-  const [customStatus, setCustomStatus] = useState('');
-  const [showStatusEditor, setShowStatusEditor] = useState(false);
-  const [showBlocked, setShowBlocked] = useState(false);
   const [error, setError] = useState('');
+
+  // Activity state
+  const [currentActivity, setCurrentActivityState] = useState<Activity | null>(null);
+  const [showActivityEditor, setShowActivityEditor] = useState(false);
+  const [availableColors, setAvailableColors] = useState<string[]>([]);
+  const [activityPresets, setActivityPresets] = useState<ActivityPreset[]>([]);
+  const [userRooms, setUserRooms] = useState<UserRoom[]>([]);
+  
+  // Activity form state
+  const [activityName, setActivityName] = useState('');
+  const [activityColor, setActivityColor] = useState('');
+  const [activityVisibility, setActivityVisibility] = useState<'all_friends' | 'specific_rooms'>('all_friends');
+  const [activityRooms, setActivityRooms] = useState<number[]>([]);
+  const [activityDuration, setActivityDuration] = useState<'hour' | 'day' | 'indefinite'>('indefinite');
+  const [saveAsPreset, setSaveAsPreset] = useState(false);
+  const [showBlocked, setShowBlocked] = useState(false);
 
   // Load initial data
   useEffect(() => {
     loadFriends();
     loadFriendRequests();
     loadBlockedUsers();
+    loadActivityData();
   }, []);
 
   const loadFriends = async () => {
@@ -88,6 +127,28 @@ const ChatFriends: React.FC = () => {
       setBlockedUsers(data);
     } catch (err) {
       console.error('Failed to load blocked users:', err);
+    }
+  };
+
+  const loadActivityData = async () => {
+    try {
+      const [colors, activity, presets, rooms] = await Promise.all([
+        getAvailableColors(),
+        getCurrentActivity(),
+        getActivityPresets(),
+        getUserRooms()
+      ]);
+      setAvailableColors(colors);
+      setCurrentActivityState(activity);
+      setActivityPresets(presets);
+      setUserRooms(rooms);
+      
+      // Set default color if available
+      if (colors.length > 0 && !activityColor) {
+        setActivityColor(colors[0]);
+      }
+    } catch (err) {
+      console.error('Failed to load activity data:', err);
     }
   };
 
@@ -192,22 +253,83 @@ const ChatFriends: React.FC = () => {
     }
   };
 
-  const handleStatusUpdate = async () => {
+  const handleSetActivity = async () => {
+    if (!activityName.trim()) {
+      setError('Activity name is required');
+      return;
+    }
+
+    setError('');
     try {
-      await setUserStatus(myStatus, customStatus);
-      setShowStatusEditor(false);
+      const activityData: any = {
+        name: activityName.trim(),
+        color: activityColor,
+        visibility_type: activityVisibility,
+        duration_type: activityDuration,
+        save_as_preset: saveAsPreset
+      };
+
+      if (activityVisibility === 'specific_rooms') {
+        activityData.room_ids = activityRooms;
+      }
+
+      if (currentActivity) {
+        await updateCurrentActivity(activityData);
+      } else {
+        await setCurrentActivity(activityData);
+      }
+
+      await loadActivityData();
+      await loadFriends(); // Refresh to show updated activity
+      setShowActivityEditor(false);
+      resetActivityForm();
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to update status');
+      setError(err.response?.data?.detail || 'Failed to set activity');
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'online': return '#4CAF50';
-      case 'away': return '#FFC107';
-      case 'busy': return '#F44336';
-      default: return '#9E9E9E';
+  const handleClearActivity = async () => {
+    try {
+      await clearActivity();
+      setCurrentActivityState(null);
+      await loadFriends();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to clear activity');
     }
+  };
+
+  const handleApplyPreset = async (preset: ActivityPreset) => {
+    // Pre-fill form with preset data
+    setActivityName(preset.name);
+    setActivityColor(preset.color);
+    setShowActivityEditor(true);
+  };
+
+  const handleDeletePreset = async (presetId: number) => {
+    if (!confirm('Delete this preset?')) return;
+    try {
+      await deleteActivityPreset(presetId);
+      await loadActivityData();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to delete preset');
+    }
+  };
+
+  const resetActivityForm = () => {
+    setActivityName('');
+    setActivityColor(availableColors[0] || '');
+    setActivityVisibility('all_friends');
+    setActivityRooms([]);
+    setActivityDuration('indefinite');
+    setSaveAsPreset(false);
+  };
+
+  const toggleRoomSelection = (roomId: number) => {
+    setActivityRooms(prev =>
+      prev.includes(roomId)
+        ? prev.filter(id => id !== roomId)
+        : [...prev, roomId]
+    );
   };
 
   const receivedRequests = friendRequests.filter(r => r.request_received);
@@ -217,7 +339,7 @@ const ChatFriends: React.FC = () => {
     <div className="friends-page">
       <style>{`
         .friends-page {
-          max-width: 800px;
+          max-width: 900px;
           margin: 0 auto;
           padding: 20px;
         }
@@ -232,47 +354,186 @@ const ChatFriends: React.FC = () => {
           font-weight: bold;
           margin: 0;
         }
-        .status-section {
+        .activity-section {
           background: #f5f5f5;
-          padding: 15px;
+          padding: 20px;
           border-radius: 8px;
           margin-bottom: 20px;
         }
-        .status-display {
+        .activity-display {
           display: flex;
           align-items: center;
-          gap: 10px;
-          cursor: pointer;
+          gap: 12px;
         }
-        .status-dot {
-          width: 12px;
-          height: 12px;
-          border-radius: 50%;
-        }
-        .status-text {
-          font-weight: 500;
-        }
-        .custom-status {
-          color: #666;
-          font-style: italic;
-        }
-        .status-editor {
-          margin-top: 10px;
-        }
-        .status-editor select,
-        .status-editor input {
-          padding: 8px;
-          margin-right: 10px;
-          border: 1px solid #ddd;
+        .activity-indicator {
+          width: 16px;
+          height: 16px;
           border-radius: 4px;
         }
-        .status-editor button {
-          padding: 8px 16px;
+        .activity-text {
+          font-weight: 500;
+          font-size: 15px;
+        }
+        .activity-display button {
+          margin-left: auto;
+          padding: 6px 12px;
           background: #4CAF50;
           color: white;
           border: none;
           border-radius: 4px;
           cursor: pointer;
+          font-size: 13px;
+        }
+        .activity-display button.clear-btn {
+          background: #F44336;
+        }
+        .activity-editor {
+          margin-top: 15px;
+          padding-top: 15px;
+          border-top: 1px solid #ddd;
+        }
+        .form-row {
+          display: flex;
+          gap: 10px;
+          margin-bottom: 12px;
+        }
+        .form-group {
+          flex: 1;
+        }
+        .form-group label {
+          display: block;
+          font-size: 13px;
+          color: #666;
+          margin-bottom: 5px;
+        }
+        .form-group input,
+        .form-group select {
+          width: 100%;
+          padding: 8px 10px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          font-size: 14px;
+          box-sizing: border-box;
+        }
+        .color-palette {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-bottom: 12px;
+        }
+        .color-option {
+          width: 32px;
+          height: 32px;
+          border-radius: 4px;
+          cursor: pointer;
+          border: 3px solid transparent;
+          transition: transform 0.15s;
+        }
+        .color-option:hover {
+          transform: scale(1.1);
+        }
+        .color-option.selected {
+          border-color: #333;
+        }
+        .room-selector {
+          max-height: 200px;
+          overflow-y: auto;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          padding: 10px;
+          margin-bottom: 12px;
+        }
+        .room-option {
+          display: flex;
+          align-items: center;
+          padding: 6px 8px;
+          cursor: pointer;
+          border-radius: 4px;
+        }
+        .room-option:hover {
+          background: #f0f0f0;
+        }
+        .room-option input {
+          margin-right: 10px;
+        }
+        .checkbox-group {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-bottom: 12px;
+        }
+        .checkbox-group input {
+          width: auto;
+        }
+        .checkbox-group label {
+          font-size: 14px;
+        }
+        .activity-actions {
+          display: flex;
+          gap: 10px;
+          margin-top: 15px;
+        }
+        .activity-actions button {
+          padding: 10px 20px;
+          border: none;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 14px;
+        }
+        .btn-save {
+          background: #4CAF50;
+          color: white;
+          flex: 1;
+        }
+        .btn-cancel {
+          background: #9E9E9E;
+          color: white;
+        }
+        .presets-section {
+          margin-top: 15px;
+          padding-top: 15px;
+          border-top: 1px solid #ddd;
+        }
+        .presets-title {
+          font-size: 14px;
+          font-weight: 500;
+          margin-bottom: 10px;
+        }
+        .presets-list {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+        }
+        .preset-item {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 6px 12px;
+          background: white;
+          border-radius: 20px;
+          font-size: 13px;
+          border: 1px solid #e0e0e0;
+        }
+        .preset-color {
+          width: 16px;
+          height: 16px;
+          border-radius: 3px;
+        }
+        .preset-apply {
+          background: none;
+          border: none;
+          color: #4CAF50;
+          cursor: pointer;
+          font-size: 11px;
+          padding: 0;
+        }
+        .preset-delete {
+          background: none;
+          border: none;
+          color: #F44336;
+          cursor: pointer;
+          font-size: 11px;
+          padding: 0;
         }
         .search-section {
           margin-bottom: 20px;
@@ -283,18 +544,19 @@ const ChatFriends: React.FC = () => {
         }
         .search-input {
           flex: 1;
-          padding: 10px;
+          padding: 12px;
           border: 1px solid #ddd;
-          border-radius: 4px;
+          border-radius: 6px;
           font-size: 14px;
         }
         .search-button {
-          padding: 10px 20px;
+          padding: 12px 24px;
           background: #4CAF50;
           color: white;
           border: none;
-          border-radius: 4px;
+          border-radius: 6px;
           cursor: pointer;
+          font-size: 14px;
         }
         .search-button:disabled {
           background: #ccc;
@@ -331,48 +593,57 @@ const ChatFriends: React.FC = () => {
           display: flex;
           align-items: center;
           gap: 15px;
+          flex: 1;
         }
         .user-avatar {
-          width: 40px;
-          height: 40px;
+          width: 45px;
+          height: 45px;
           border-radius: 50%;
           background: #e0e0e0;
           display: flex;
           align-items: center;
           justify-content: center;
           font-weight: bold;
-          font-size: 16px;
+          font-size: 18px;
+          color: #666;
         }
         .user-details {
           display: flex;
           flex-direction: column;
+          flex: 1;
         }
         .user-name {
-          font-weight: 500;
+          font-weight: 600;
           font-size: 16px;
+          margin-bottom: 4px;
         }
-        .user-status {
-          font-size: 12px;
-          color: #666;
+        .user-activity {
           display: flex;
           align-items: center;
-          gap: 5px;
+          gap: 8px;
+          font-size: 13px;
         }
-        .user-status .status-dot {
-          width: 8px;
-          height: 8px;
-        }
-        .user-custom-status {
+        .activity-badge {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 10px;
+          border-radius: 12px;
           font-size: 12px;
-          color: #888;
-          font-style: italic;
+          font-weight: 500;
+        }
+        .activity-badge .color-dot {
+          width: 10px;
+          height: 10px;
+          border-radius: 50%;
         }
         .user-actions {
           display: flex;
           gap: 8px;
+          flex-shrink: 0;
         }
         .action-button {
-          padding: 6px 12px;
+          padding: 8px 14px;
           border: none;
           border-radius: 4px;
           cursor: pointer;
@@ -409,19 +680,20 @@ const ChatFriends: React.FC = () => {
         .no-results {
           text-align: center;
           color: #666;
-          padding: 20px;
+          padding: 30px;
+          font-size: 15px;
         }
         .error-message {
           background: #ffebee;
           color: #c62828;
-          padding: 10px;
+          padding: 12px;
           border-radius: 4px;
           margin-bottom: 15px;
         }
         .pending-badge {
           background: #FFC107;
           color: #333;
-          padding: 2px 6px;
+          padding: 3px 8px;
           border-radius: 4px;
           font-size: 11px;
           margin-left: 5px;
@@ -431,7 +703,7 @@ const ChatFriends: React.FC = () => {
       {error && (
         <div className="error-message">
           {error}
-          <button onClick={() => setError('')} style={{float: 'right', background: 'none', border: 'none', cursor: 'pointer'}}>✕</button>
+          <button onClick={() => setError('')} style={{float: 'right', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px'}}>✕</button>
         </div>
       )}
 
@@ -439,43 +711,153 @@ const ChatFriends: React.FC = () => {
         <h1 className="friends-title">Friends</h1>
       </div>
 
-      {/* Status Section */}
-      <div className="status-section">
-        {!showStatusEditor ? (
-          <div className="status-display" onClick={() => setShowStatusEditor(true)}>
-            <div
-              className="status-dot"
-              style={{ backgroundColor: getStatusColor(myStatus) }}
-            />
-            <span className="status-text">{myStatus.charAt(0).toUpperCase() + myStatus.slice(1)}</span>
-            {customStatus && <span className="custom-status">- {customStatus}</span>}
-            <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#666' }}>✎ Edit</span>
+      {/* Activity Section */}
+      <div className="activity-section">
+        {!showActivityEditor ? (
+          <div className="activity-display">
+            {currentActivity ? (
+              <>
+                <div
+                  className="activity-indicator"
+                  style={{ backgroundColor: currentActivity.color }}
+                />
+                <span className="activity-text">{currentActivity.name}</span>
+                <button className="clear-btn" onClick={handleClearActivity}>Clear</button>
+                <button onClick={() => setShowActivityEditor(true)}>Edit</button>
+              </>
+            ) : (
+              <>
+                <div className="activity-indicator" style={{ backgroundColor: '#e0e0e0' }} />
+                <span className="activity-text" style={{ color: '#999' }}>No activity set</span>
+                <button onClick={() => setShowActivityEditor(true)}>Add Activity</button>
+              </>
+            )}
           </div>
         ) : (
-          <div className="status-editor">
-            <select
-              value={myStatus}
-              onChange={(e) => setMyStatus(e.target.value as any)}
-            >
-              <option value="online">🟢 Online</option>
-              <option value="away">🟡 Away</option>
-              <option value="busy">🔴 Busy</option>
-              <option value="offline">⚫ Offline</option>
-            </select>
-            <input
-              type="text"
-              placeholder="Custom status (optional)"
-              value={customStatus}
-              onChange={(e) => setCustomStatus(e.target.value)}
-              maxLength={140}
-            />
-            <button onClick={handleStatusUpdate}>Save</button>
-            <button
-              onClick={() => setShowStatusEditor(false)}
-              style={{ background: '#9E9E9E' }}
-            >
-              Cancel
-            </button>
+          <div className="activity-editor">
+            <h3 style={{ margin: '0 0 15px 0', fontSize: '16px' }}>
+              {currentActivity ? 'Edit Activity' : 'Add Activity'}
+            </h3>
+            
+            <div className="form-group" style={{ marginBottom: '12px' }}>
+              <label>Activity Name (max 35 characters)</label>
+              <input
+                type="text"
+                placeholder="What are you doing?"
+                value={activityName}
+                onChange={(e) => setActivityName(e.target.value.slice(0, 35))}
+                maxLength={35}
+              />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '12px' }}>
+              <label>Color</label>
+              <div className="color-palette">
+                {availableColors.map(color => (
+                  <div
+                    key={color}
+                    className={`color-option ${activityColor === color ? 'selected' : ''}`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => setActivityColor(color)}
+                    title={color}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="form-row">
+              <div className="form-group">
+                <label>Visibility</label>
+                <select
+                  value={activityVisibility}
+                  onChange={(e) => setActivityVisibility(e.target.value as any)}
+                >
+                  <option value="all_friends">All Friends</option>
+                  <option value="specific_rooms">Specific Rooms</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Duration</label>
+                <select
+                  value={activityDuration}
+                  onChange={(e) => setActivityDuration(e.target.value as any)}
+                >
+                  <option value="indefinite">Indefinite</option>
+                  <option value="hour">1 Hour</option>
+                  <option value="day">1 Day</option>
+                </select>
+              </div>
+            </div>
+
+            {activityVisibility === 'specific_rooms' && (
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label>Select Rooms (members of these rooms can see your activity)</label>
+                <div className="room-selector">
+                  {userRooms.length === 0 ? (
+                    <div style={{ color: '#999', padding: '10px' }}>
+                      You are not a member of any rooms. Choose "All Friends" to share with all your friends.
+                    </div>
+                  ) : (
+                    userRooms.map(room => (
+                      <div
+                        key={room.id}
+                        className="room-option"
+                        onClick={() => toggleRoomSelection(room.id)}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={activityRooms.includes(room.id)}
+                          onChange={() => {}}
+                        />
+                        {room.name}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="checkbox-group">
+              <input
+                type="checkbox"
+                id="savePreset"
+                checked={saveAsPreset}
+                onChange={(e) => setSaveAsPreset(e.target.checked)}
+              />
+              <label htmlFor="savePreset">Save as preset for quick reuse</label>
+            </div>
+
+            <div className="activity-actions">
+              <button className="btn-save" onClick={handleSetActivity}>
+                {currentActivity ? 'Update Activity' : 'Set Activity'}
+              </button>
+              <button className="btn-cancel" onClick={() => {
+                setShowActivityEditor(false);
+                resetActivityForm();
+              }}>
+                Cancel
+              </button>
+            </div>
+
+            {activityPresets.length > 0 && (
+              <div className="presets-section">
+                <div className="presets-title">Presets</div>
+                <div className="presets-list">
+                  {activityPresets.map(preset => (
+                    <div key={preset.id} className="preset-item">
+                      <div className="preset-color" style={{ backgroundColor: preset.color }} />
+                      {preset.name}
+                      <button className="preset-apply" onClick={() => handleApplyPreset(preset)}>
+                        Use
+                      </button>
+                      <button className="preset-delete" onClick={() => handleDeletePreset(preset.id)}>
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -508,15 +890,16 @@ const ChatFriends: React.FC = () => {
                 </div>
                 <div className="user-details">
                   <div className="user-name">{user.username}</div>
-                  <div className="user-status">
-                    <div
-                      className="status-dot"
-                      style={{ backgroundColor: getStatusColor(user.status) }}
-                    />
-                    {user.is_online ? 'Online' : 'Offline'}
-                  </div>
-                  {user.custom_status && (
-                    <div className="user-custom-status">"{user.custom_status}"</div>
+                  {user.activity && (
+                    <div className="user-activity">
+                      <div
+                        className="activity-badge"
+                        style={{ backgroundColor: user.activity.color + '20', color: user.activity.color }}
+                      >
+                        <div className="color-dot" style={{ backgroundColor: user.activity.color }} />
+                        {user.activity.name}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
@@ -577,15 +960,16 @@ const ChatFriends: React.FC = () => {
                 </div>
                 <div className="user-details">
                   <div className="user-name">{request.from_user.username}</div>
-                  <div className="user-status">
-                    <div
-                      className="status-dot"
-                      style={{ backgroundColor: getStatusColor(request.from_user.status) }}
-                    />
-                    {request.from_user.is_online ? 'Online' : 'Offline'}
-                  </div>
-                  {request.from_user.custom_status && (
-                    <div className="user-custom-status">"{request.from_user.custom_status}"</div>
+                  {request.from_user.activity && (
+                    <div className="user-activity">
+                      <div
+                        className="activity-badge"
+                        style={{ backgroundColor: request.from_user.activity.color + '20', color: request.from_user.activity.color }}
+                      >
+                        <div className="color-dot" style={{ backgroundColor: request.from_user.activity.color }} />
+                        {request.from_user.activity.name}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
@@ -657,15 +1041,16 @@ const ChatFriends: React.FC = () => {
                 </div>
                 <div className="user-details">
                   <div className="user-name">{friend.friend.username}</div>
-                  <div className="user-status">
-                    <div
-                      className="status-dot"
-                      style={{ backgroundColor: getStatusColor(friend.friend_status.status) }}
-                    />
-                    {friend.friend_status.is_online ? 'Online' : 'Offline'}
-                  </div>
-                  {friend.friend_status.custom_status && (
-                    <div className="user-custom-status">"{friend.friend_status.custom_status}"</div>
+                  {friend.friend.activity && (
+                    <div className="user-activity">
+                      <div
+                        className="activity-badge"
+                        style={{ backgroundColor: friend.friend.activity.color + '20', color: friend.friend.activity.color }}
+                      >
+                        <div className="color-dot" style={{ backgroundColor: friend.friend.activity.color }} />
+                        {friend.friend.activity.name}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>

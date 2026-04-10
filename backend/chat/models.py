@@ -140,3 +140,108 @@ class UserStatus(models.Model):
 
     def __str__(self):
         return f"{self.user.username}: {self.status} - {self.custom_status or 'No status'}"
+
+
+# Predefined color palette for activities
+ACTIVITY_COLORS = [
+    '#4CAF50',  # Green
+    '#2196F3',  # Blue
+    '#9C27B0',  # Purple
+    '#FF5722',  # Orange
+    '#F44336',  # Red
+    '#FFC107',  # Amber
+    '#00BCD4',  # Cyan
+    '#8BC34A',  # Light Green
+    '#3F51B5',  # Indigo
+    '#E91E63',  # Pink
+    '#795548',  # Brown
+    '#607D8B',  # Blue Grey
+]
+
+
+class Activity(models.Model):
+    """User's current activity with visibility settings."""
+    VISIBILITY_CHOICES = [
+        ('all_friends', 'All Friends'),
+        ('specific_rooms', 'Specific Rooms'),
+    ]
+    
+    DURATION_CHOICES = [
+        ('hour', '1 Hour'),
+        ('day', '1 Day'),
+        ('indefinite', 'Indefinite'),
+    ]
+    
+    user = models.OneToOneField(User, related_name='activity', on_delete=models.CASCADE)
+    name = models.CharField(max_length=35)
+    color = models.CharField(max_length=7, choices=[(c, c) for c in ACTIVITY_COLORS])
+    visibility_type = models.CharField(max_length=20, choices=VISIBILITY_CHOICES, default='all_friends')
+    rooms = models.ManyToManyField(Room, related_name='visible_activities', blank=True)
+    duration_type = models.CharField(max_length=20, choices=DURATION_CHOICES, default='indefinite')
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', 'expires_at']),
+            models.Index(fields=['expires_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username}: {self.name}"
+    
+    def is_expired(self):
+        if self.expires_at is None:
+            return False
+        from django.utils import timezone
+        return timezone.now() > self.expires_at
+    
+    def is_visible_to(self, viewer_user):
+        """Check if this activity is visible to the given viewer."""
+        # Don't show to self
+        if self.user == viewer_user:
+            return True
+        
+        # Check if users are friends
+        from django.db.models import Q
+        are_friends = Friendship.objects.filter(
+            Q(user1=self.user, user2=viewer_user) | 
+            Q(user1=viewer_user, user2=self.user)
+        ).exists()
+        
+        if not are_friends:
+            return False
+        
+        # Check if blocked
+        if Block.objects.filter(
+            Q(blocker=self.user, blocked=viewer_user) |
+            Q(blocker=viewer_user, blocked=self.user)
+        ).exists():
+            return False
+        
+        # Check visibility
+        if self.visibility_type == 'all_friends':
+            return True
+        elif self.visibility_type == 'specific_rooms':
+            # Check if viewer is in any of the rooms where this activity is visible
+            return self.rooms.filter(
+                memberships__user=viewer_user
+            ).exists()
+        
+        return False
+
+
+class ActivityPreset(models.Model):
+    """Saved activity presets for quick reuse."""
+    user = models.ForeignKey(User, related_name='activity_presets', on_delete=models.CASCADE)
+    name = models.CharField(max_length=35)
+    color = models.CharField(max_length=7, choices=[(c, c) for c in ACTIVITY_COLORS])
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'name')
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username}: {self.name}"

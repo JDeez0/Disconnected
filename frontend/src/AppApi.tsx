@@ -190,3 +190,64 @@ export const getUserStatus = async (userId: number) => {
   const response = await axios.get(`${API_ENDPOINT_BASE}/api/friends/status/${userId}/`);
   return response.data
 }
+
+// Activity-related API functions
+export const getAvailableColors = async () => {
+  const response = await axios.get(`${API_ENDPOINT_BASE}/api/activity/colors/`);
+  return response.data
+}
+
+export const getCurrentActivity = async () => {
+  const response = await axios.get(`${API_ENDPOINT_BASE}/api/activity/current/`);
+  return response.data
+}
+
+export const setCurrentActivity = async (activityData: any) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/activity/current/`, activityData);
+  return response.data
+}
+
+export const updateCurrentActivity = async (activityData: any) => {
+  const response = await axios.put(`${API_ENDPOINT_BASE}/api/activity/current/`, activityData);
+  return response.data
+}
+
+export const clearActivity = async () => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/activity/clear/`);
+  return response.data
+}
+
+export const getUserActivity = async (userId: number) => {
+  const response = await axios.get(`${API_ENDPOINT_BASE}/api/activity/user/${userId}/`);
+  return response.data
+}
+
+export const getActivityPresets = async () => {
+  const response = await axios.get(`${API_ENDPOINT_BASE}/api/activity/presets/`);
+  return response.data
+}
+
+export const createActivityPreset = async (presetData: any) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/activity/presets/`, presetData);
+  return response.data
+}
+
+export const updateActivityPreset = async (presetId: number, presetData: any) => {
+  const response = await axios.put(`${API_ENDPOINT_BASE}/api/activity/presets/${presetId}/`, presetData);
+  return response.data
+}
+
+export const deleteActivityPreset = async (presetId: number) => {
+  const response = await axios.delete(`${API_ENDPOINT_BASE}/api/activity/presets/${presetId}/`);
+  return response.data
+}
+
+export const applyActivityPreset = async (presetId: number, activityData: any) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/activity/presets/${presetId}/apply/`, { activity: activityData });
+  return response.data
+}
+
+export const getUserRooms = async () => {
+  const response = await axios.get(`${API_ENDPOINT_BASE}/api/activity/rooms/`);
+  return response.data
+}

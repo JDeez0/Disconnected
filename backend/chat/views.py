@@ -7,6 +7,7 @@ from django.db import transaction, models
 from django.db.models import Exists, OuterRef, Count
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from datetime import timedelta
 from rest_framework import status, viewsets
 from rest_framework.generics import ListCreateAPIView
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
@@ -15,12 +16,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
-from .models import Message, Room, RoomMember, Outbox, CDC, Friendship, FriendRequest, Block, UserStatus
+from .models import (
+    Message, Room, RoomMember, Outbox, CDC, Friendship, FriendRequest, Block, UserStatus,
+    Activity, ActivityPreset, ACTIVITY_COLORS
+)
 from .serializers import (
     MessageSerializer, RoomSearchSerializer, RoomSerializer, RoomMemberSerializer,
     UserWithStatusSerializer, FriendshipSerializer, FriendRequestSerializer,
-    BlockSerializer, UserStatusSerializer
+    BlockSerializer, UserStatusSerializer, ActivitySerializer, ActivityPresetSerializer,
+    ActivityCreateSerializer, ActivityPublicSerializer, UserActivitySerializer
 )
+from datetime import timedelta
 
 
 class RoomListViewSet(ListModelMixin, GenericViewSet):
@@ -620,7 +626,7 @@ class SetUserStatusView(APIView):
 
 
 class GetUserStatusView(APIView):
-    """Get a user's status."""
+    """Get a user's status (deprecated, use GetUserActivityView)."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request, user_id):
@@ -655,3 +661,226 @@ class GetUserStatusView(APIView):
                 'is_online': False,
                 'last_seen': None
             }, status=status.HTTP_200_OK)
+
+
+# ============ ACTIVITY VIEWS ============
+
+class GetAvailableColorsView(APIView):
+    """Get available colors for activities."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(ACTIVITY_COLORS, status=status.HTTP_200_OK)
+
+
+class CurrentActivityView(APIView):
+    """Get or set the current user's activity."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            activity = request.user.activity
+            serializer = ActivitySerializer(activity)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Activity.DoesNotExist:
+            return Response(None, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = ActivityCreateSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        activity = serializer.save()
+        response_serializer = ActivitySerializer(activity)
+        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+    def put(self, request):
+        try:
+            activity = request.user.activity
+            serializer = ActivityCreateSerializer(activity, data=request.data, partial=True, context={'request': request})
+            serializer.is_valid(raise_exception=True)
+            activity = serializer.save()
+            response_serializer = ActivitySerializer(activity)
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+        except Activity.DoesNotExist:
+            # Create new activity if none exists
+            serializer = ActivityCreateSerializer(data=request.data, context={'request': request})
+            serializer.is_valid(raise_exception=True)
+            activity = serializer.save()
+            response_serializer = ActivitySerializer(activity)
+            return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+
+
+class ClearActivityView(APIView):
+    """Clear the current user's activity."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        Activity.objects.filter(user=request.user).delete()
+        return Response({'message': 'Activity cleared'}, status=status.HTTP_200_OK)
+
+
+class GetUserActivityView(APIView):
+    """Get a user's visible activity."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        try:
+            user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {'detail': 'User not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check if blocked
+        if Block.objects.filter(
+            models.Q(blocker=request.user, blocked=user) |
+            models.Q(blocker=user, blocked=request.user)
+        ).exists():
+            return Response(None, status=status.HTTP_403_FORBIDDEN)
+
+        # Check if friends
+        are_friends = Friendship.objects.filter(
+            models.Q(user1=request.user, user2=user) |
+            models.Q(user1=user, user2=request.user)
+        ).exists()
+
+        if not are_friends:
+            return Response(None, status=status.HTTP_200_OK)
+
+        # Get visible activity
+        try:
+            activity = user.activity
+            if activity.is_visible_to(request.user) and not activity.is_expired():
+                serializer = ActivityPublicSerializer({
+                    'name': activity.name,
+                    'color': activity.color
+                })
+                return Response(serializer.data, status=status.HTTP_200_OK)
+        except Activity.DoesNotExist:
+            pass
+
+        return Response(None, status=status.HTTP_200_OK)
+
+
+class ActivityPresetListView(APIView):
+    """List and create activity presets for the current user."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        presets = ActivityPreset.objects.filter(user=request.user)
+        serializer = ActivityPresetSerializer(presets, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        serializer = ActivityPresetSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+        serializer.save(user=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class ActivityPresetDetailView(APIView):
+    """Get, update, or delete an activity preset."""
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self, request, preset_id):
+        try:
+            return ActivityPreset.objects.get(pk=preset_id, user=request.user)
+        except ActivityPreset.DoesNotExist:
+            return None
+
+    def get(self, request, preset_id):
+        preset = self.get_object(request, preset_id)
+        if not preset:
+            return Response(
+                {'detail': 'Preset not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        serializer = ActivityPresetSerializer(preset)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def put(self, request, preset_id):
+        preset = self.get_object(request, preset_id)
+        if not preset:
+            return Response(
+                {'detail': 'Preset not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        serializer = ActivityPresetSerializer(preset, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def delete(self, request, preset_id):
+        preset = self.get_object(request, preset_id)
+        if not preset:
+            return Response(
+                {'detail': 'Preset not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        preset.delete()
+        return Response({'message': 'Preset deleted'}, status=status.HTTP_200_OK)
+
+
+class ApplyActivityPresetView(APIView):
+    """Apply a preset as the current activity."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, preset_id):
+        try:
+            preset = ActivityPreset.objects.get(pk=preset_id, user=request.user)
+        except ActivityPreset.DoesNotExist:
+            return Response(
+                {'detail': 'Preset not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Delete existing activity
+        Activity.objects.filter(user=request.user).delete()
+
+        # Create new activity from preset
+        activity_data = request.data.get('activity', {})
+        visibility_type = activity_data.get('visibility_type', 'all_friends')
+        room_ids = activity_data.get('room_ids', [])
+        duration_type = activity_data.get('duration_type', 'indefinite')
+
+        # Calculate expiration
+        expires_at = None
+        if duration_type == 'hour':
+            expires_at = timezone.now() + timedelta(hours=1)
+        elif duration_type == 'day':
+            expires_at = timezone.now() + timedelta(days=1)
+
+        activity = Activity.objects.create(
+            user=request.user,
+            name=preset.name,
+            color=preset.color,
+            visibility_type=visibility_type,
+            duration_type=duration_type,
+            expires_at=expires_at
+        )
+
+        if room_ids:
+            activity.rooms.set(room_ids)
+
+        serializer = ActivitySerializer(activity)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class GetUserRoomsView(APIView):
+    """Get list of rooms the current user is a member of (for activity visibility)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        rooms = RoomMember.objects.filter(
+            user=request.user
+        ).select_related('room').order_by('room__name')
+
+        room_list = [
+            {
+                'id': rm.room.id,
+                'name': rm.room.name
+            }
+            for rm in rooms
+        ]
+
+        return Response(room_list, status=status.HTTP_200_OK)
