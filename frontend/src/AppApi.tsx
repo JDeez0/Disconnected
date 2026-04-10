@@ -202,18 +202,30 @@ export const getCurrentActivity = async () => {
   return response.data
 }
 
-export const setCurrentActivity = async (activityData: any) => {
-  const response = await axios.post(`${API_ENDPOINT_BASE}/api/activity/current/`, activityData);
+export const setCurrentActivity = async (csrfToken: string, activityData: any) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/activity/current/`, activityData, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
   return response.data
 }
 
-export const updateCurrentActivity = async (activityData: any) => {
-  const response = await axios.put(`${API_ENDPOINT_BASE}/api/activity/current/`, activityData);
+export const updateCurrentActivity = async (csrfToken: string, activityData: any) => {
+  const response = await axios.put(`${API_ENDPOINT_BASE}/api/activity/current/`, activityData, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
   return response.data
 }
 
-export const clearActivity = async () => {
-  const response = await axios.post(`${API_ENDPOINT_BASE}/api/activity/clear/`);
+export const clearActivity = async (csrfToken: string) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/activity/clear/`, {}, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
   return response.data
 }
 

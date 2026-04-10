@@ -274,9 +274,9 @@ const ChatFriends: React.FC = () => {
       }
 
       if (currentActivity) {
-        await updateCurrentActivity(activityData);
+        await updateCurrentActivity(csrf, activityData);
       } else {
-        await setCurrentActivity(activityData);
+        await setCurrentActivity(csrf, activityData);
       }
 
       await loadActivityData();
@@ -290,7 +290,7 @@ const ChatFriends: React.FC = () => {
 
   const handleClearActivity = async () => {
     try {
-      await clearActivity();
+      await clearActivity(csrf);
       setCurrentActivityState(null);
       await loadFriends();
     } catch (err: any) {
