@@ -117,3 +117,76 @@ export const registerDevice = async (csrfToken: string, deviceInfo: any) => {
   });
   return response.data
 }
+
+// Friend-related API functions
+export const searchUsers = async (query: string) => {
+  const response = await axios.get(`${API_ENDPOINT_BASE}/api/friends/search/`, {
+    params: { q: query }
+  });
+  return response.data
+}
+
+export const getFriends = async () => {
+  const response = await axios.get(`${API_ENDPOINT_BASE}/api/friends/`);
+  return response.data
+}
+
+export const getFriendRequests = async (type: 'all' | 'sent' | 'received' = 'all') => {
+  const response = await axios.get(`${API_ENDPOINT_BASE}/api/friends/requests/`, {
+    params: { type }
+  });
+  return response.data
+}
+
+export const sendFriendRequest = async (userId: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/request/send/${userId}/`);
+  return response.data
+}
+
+export const acceptFriendRequest = async (requestId: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/request/accept/${requestId}/`);
+  return response.data
+}
+
+export const rejectFriendRequest = async (requestId: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/request/reject/${requestId}/`);
+  return response.data
+}
+
+export const cancelFriendRequest = async (requestId: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/request/cancel/${requestId}/`);
+  return response.data
+}
+
+export const unfriend = async (userId: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/unfriend/${userId}/`);
+  return response.data
+}
+
+export const blockUser = async (userId: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/block/${userId}/`);
+  return response.data
+}
+
+export const unblockUser = async (userId: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/unblock/${userId}/`);
+  return response.data
+}
+
+export const getBlockedUsers = async () => {
+  const response = await axios.get(`${API_ENDPOINT_BASE}/api/friends/blocked/`);
+  return response.data
+}
+
+export const setUserStatus = async (status: 'online' | 'away' | 'busy' | 'offline', customStatus?: string) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/status/set/`, {
+    status,
+    custom_status: customStatus || ''
+  });
+  return response.data
+}
+
+export const getUserStatus = async (userId: number) => {
+  const response = await axios.get(`${API_ENDPOINT_BASE}/api/friends/status/${userId}/`);
+  return response.data
+}

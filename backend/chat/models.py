@@ -59,3 +59,84 @@ class CDC(models.Model):
     payload = models.JSONField()
     partition = models.BigIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Friendship(models.Model):
+    """Mutual friendship relationship between two users."""
+    user1 = models.ForeignKey(User, related_name='friendships_initiated', on_delete=models.CASCADE)
+    user2 = models.ForeignKey(User, related_name='friendships_received', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('user1', 'user2')
+        indexes = [
+            models.Index(fields=['user1']),
+            models.Index(fields=['user2']),
+        ]
+
+    def __str__(self):
+        return f"{self.user1.username} <-> {self.user2.username}"
+
+
+class FriendRequest(models.Model):
+    """Pending friend request from one user to another."""
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('rejected', 'Rejected'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    from_user = models.ForeignKey(User, related_name='sent_requests', on_delete=models.CASCADE)
+    to_user = models.ForeignKey(User, related_name='received_requests', on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('from_user', 'to_user')
+        indexes = [
+            models.Index(fields=['from_user', 'status']),
+            models.Index(fields=['to_user', 'status']),
+            models.Index(fields=['status']),
+        ]
+
+    def __str__(self):
+        return f"{self.from_user.username} -> {self.to_user.username} ({self.status})"
+
+
+class Block(models.Model):
+    """Block relationship - one user blocking another."""
+    blocker = models.ForeignKey(User, related_name='blocks_made', on_delete=models.CASCADE)
+    blocked = models.ForeignKey(User, related_name='blocked_by', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('blocker', 'blocked')
+        indexes = [
+            models.Index(fields=['blocker']),
+            models.Index(fields=['blocked']),
+        ]
+
+    def __str__(self):
+        return f"{self.blocker.username} blocked {self.blocked.username}"
+
+
+class UserStatus(models.Model):
+    """User online status and custom status message."""
+    STATUS_CHOICES = [
+        ('online', 'Online'),
+        ('away', 'Away'),
+        ('busy', 'Busy'),
+        ('offline', 'Offline'),
+    ]
+    
+    user = models.OneToOneField(User, related_name='status', on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='offline')
+    custom_status = models.CharField(max_length=140, blank=True, null=True)
+    last_seen = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username}: {self.status} - {self.custom_status or 'No status'}"

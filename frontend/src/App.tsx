@@ -6,6 +6,7 @@ import ChatLogin from './ChatLogin';
 import ChatRoomList from './ChatRoomList';
 import ChatRoomDetail from './ChatRoomDetail';
 import ChatLayout from './ChatLayout';
+import ChatFriends from './ChatFriends';
 import CsrfContext from './CsrfContext';
 import AuthContext from './AuthContext';
 import ChatContext from './ChatContext';
@@ -550,6 +551,7 @@ const App: React.FC = () => {
                 <Routes>
                   <Route path="/" element={<ChatRoomList />} />
                   <Route path="/search" element={<ChatSearch fetchRoom={fetchRoom} />} />
+                  <Route path="/friends" element={<ChatFriends />} />
                   <Route path="/rooms/:id" element={
                     <ChatRoomDetail
                       fetchRoom={fetchRoom}

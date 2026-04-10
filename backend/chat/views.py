@@ -3,7 +3,7 @@ import logging
 import requests
 from requests.adapters import HTTPAdapter, Retry
 from django.conf import settings
-from django.db import transaction
+from django.db import transaction, models
 from django.db.models import Exists, OuterRef, Count
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -15,8 +15,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
-from .models import Message, Room, RoomMember, Outbox, CDC
-from .serializers import MessageSerializer, RoomSearchSerializer, RoomSerializer, RoomMemberSerializer
+from .models import Message, Room, RoomMember, Outbox, CDC, Friendship, FriendRequest, Block, UserStatus
+from .serializers import (
+    MessageSerializer, RoomSearchSerializer, RoomSerializer, RoomMemberSerializer,
+    UserWithStatusSerializer, FriendshipSerializer, FriendRequestSerializer,
+    BlockSerializer, UserStatusSerializer
+)
 
 
 class RoomListViewSet(ListModelMixin, GenericViewSet):
@@ -255,3 +259,399 @@ class LeaveRoomView(APIView, CentrifugoMixin):
         self.broadcast_room(room, broadcast_payload)
         self.update_user_room_topic(request.user.pk, room_id, 'remove')
         return Response(body, status=status.HTTP_200_OK)
+
+
+# ============ FRIENDSHIP VIEWS ============
+
+class SearchUsersView(APIView):
+    """Search for users by username or email."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        query = request.GET.get('q', '').strip()
+        if not query:
+            return Response([], status=status.HTTP_200_OK)
+
+        # Get IDs of current friends, blocked users, and pending requests
+        friend_ids = set()
+        blocked_ids = set()
+        pending_request_ids = set()
+
+        # Get friendships
+        friendships = Friendship.objects.filter(
+            models.Q(user1=request.user) | models.Q(user2=request.user)
+        )
+        for f in friendships:
+            friend_id = f.user2.pk if f.user1 == request.user else f.user1.pk
+            friend_ids.add(friend_id)
+
+        # Get blocked users
+        blocks = Block.objects.filter(blocker=request.user)
+        blocked_ids = set(blocks.values_list('blocked_id', flat=True))
+
+        # Get pending requests
+        sent_requests = FriendRequest.objects.filter(
+            from_user=request.user, status='pending'
+        ).values_list('to_user_id', flat=True)
+        pending_request_ids.update(sent_requests)
+
+        received_requests = FriendRequest.objects.filter(
+            to_user=request.user, status='pending'
+        ).values_list('from_user_id', flat=True)
+        pending_request_ids.update(received_requests)
+
+        # Search users
+        users = User.objects.filter(
+            models.Q(username__icontains=query) | models.Q(email__icontains=query)
+        ).exclude(
+            pk=request.user.pk
+        ).select_related('status').distinct()
+
+        # Serialize results with additional info
+        results = []
+        for user in users:
+            is_friend = user.pk in friend_ids
+            is_blocked = user.pk in blocked_ids
+            has_pending_request = user.pk in pending_request_ids
+            is_blocked_by = Block.objects.filter(
+                blocker=user, blocked=request.user
+            ).exists()
+
+            # Skip if blocked by other user or current user blocked them
+            if is_blocked or is_blocked_by:
+                continue
+
+            user_data = UserWithStatusSerializer(user).data
+            user_data['is_friend'] = is_friend
+            user_data['has_pending_request'] = has_pending_request
+            user_data['request_sent_by_me'] = user.pk in sent_requests
+            user_data['request_received'] = user.pk in received_requests
+            results.append(user_data)
+
+        return Response(results, status=status.HTTP_200_OK)
+
+
+class FriendsListView(APIView):
+    """Get list of friends with their status."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        friendships = Friendship.objects.filter(
+            models.Q(user1=request.user) | models.Q(user2=request.user)
+        ).select_related('user1__status', 'user2__status')
+
+        serializer = FriendshipSerializer(friendships, many=True, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class FriendRequestsView(APIView):
+    """Get pending friend requests (both sent and received)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        type_filter = request.GET.get('type', 'all')  # 'sent', 'received', or 'all'
+
+        queryset = FriendRequest.objects.filter(status='pending')
+
+        if type_filter == 'sent':
+            queryset = queryset.filter(from_user=request.user)
+        elif type_filter == 'received':
+            queryset = queryset.filter(to_user=request.user)
+        else:
+            queryset = queryset.filter(
+                models.Q(from_user=request.user) | models.Q(to_user=request.user)
+            )
+
+        queryset = queryset.select_related('from_user__status', 'to_user__status')
+        serializer = FriendRequestSerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class SendFriendRequestView(APIView):
+    """Send a friend request to another user."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id):
+        # Check if blocking exists
+        if Block.objects.filter(
+            models.Q(blocker=request.user, blocked_id=user_id) |
+            models.Q(blocker_id=user_id, blocked=request.user)
+        ).exists():
+            return Response(
+                {'detail': 'Cannot send friend request due to block'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Check if already friends
+        if Friendship.objects.filter(
+            models.Q(user1=request.user, user2_id=user_id) |
+            models.Q(user1_id=user_id, user2=request.user)
+        ).exists():
+            return Response(
+                {'detail': 'Already friends with this user'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check if request already exists
+        if FriendRequest.objects.filter(
+            models.Q(from_user=request.user, to_user_id=user_id) |
+            models.Q(from_user_id=user_id, to_user=request.user),
+            status='pending'
+        ).exists():
+            return Response(
+                {'detail': 'Friend request already exists'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            to_user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {'detail': 'User not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Create friend request
+        friend_request = FriendRequest.objects.create(
+            from_user=request.user,
+            to_user=to_user,
+            status='pending'
+        )
+
+        serializer = FriendRequestSerializer(friend_request)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class AcceptFriendRequestView(APIView):
+    """Accept a friend request."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, request_id):
+        try:
+            friend_request = FriendRequest.objects.get(
+                pk=request_id,
+                to_user=request.user,
+                status='pending'
+            )
+        except FriendRequest.DoesNotExist:
+            return Response(
+                {'detail': 'Friend request not found or already processed'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Create friendship
+        with transaction.atomic():
+            friendship, _ = Friendship.objects.get_or_create(
+                user1=friend_request.from_user,
+                user2=friend_request.to_user
+            )
+            friend_request.status = 'accepted'
+            friend_request.save()
+
+        serializer = FriendshipSerializer(friendship, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class RejectFriendRequestView(APIView):
+    """Reject a friend request."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, request_id):
+        try:
+            friend_request = FriendRequest.objects.get(
+                pk=request_id,
+                to_user=request.user,
+                status='pending'
+            )
+        except FriendRequest.DoesNotExist:
+            return Response(
+                {'detail': 'Friend request not found or already processed'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        friend_request.status = 'rejected'
+        friend_request.save()
+
+        return Response({'message': 'Friend request rejected'}, status=status.HTTP_200_OK)
+
+
+class CancelFriendRequestView(APIView):
+    """Cancel a pending friend request."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, request_id):
+        try:
+            friend_request = FriendRequest.objects.get(
+                pk=request_id,
+                from_user=request.user,
+                status='pending'
+            )
+        except FriendRequest.DoesNotExist:
+            return Response(
+                {'detail': 'Friend request not found or already processed'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        friend_request.status = 'cancelled'
+        friend_request.save()
+
+        return Response({'message': 'Friend request cancelled'}, status=status.HTTP_200_OK)
+
+
+class UnfriendView(APIView):
+    """Remove a friend."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id):
+        try:
+            friendship = Friendship.objects.get(
+                models.Q(user1=request.user, user2_id=user_id) |
+                models.Q(user1_id=user_id, user2=request.user)
+            )
+        except Friendship.DoesNotExist:
+            return Response(
+                {'detail': 'Friendship not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        friendship.delete()
+        return Response({'message': 'Unfriended successfully'}, status=status.HTTP_200_OK)
+
+
+class BlockUserView(APIView):
+    """Block a user."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id):
+        if user_id == request.user.pk:
+            return Response(
+                {'detail': 'Cannot block yourself'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Remove friendship if exists
+        Friendship.objects.filter(
+            models.Q(user1=request.user, user2_id=user_id) |
+            models.Q(user1_id=user_id, user2=request.user)
+        ).delete()
+
+        # Cancel any pending requests
+        FriendRequest.objects.filter(
+            models.Q(from_user=request.user, to_user_id=user_id) |
+            models.Q(from_user_id=user_id, to_user=request.user),
+            status='pending'
+        ).update(status='cancelled')
+
+        # Create block
+        block, created = Block.objects.get_or_create(
+            blocker=request.user,
+            blocked_id=user_id
+        )
+
+        serializer = BlockSerializer(block)
+        return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class UnblockUserView(APIView):
+    """Unblock a user."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, user_id):
+        try:
+            block = Block.objects.get(
+                blocker=request.user,
+                blocked_id=user_id
+            )
+            block.delete()
+            return Response({'message': 'Unblocked successfully'}, status=status.HTTP_200_OK)
+        except Block.DoesNotExist:
+            return Response(
+                {'detail': 'Block not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
+class BlockedUsersView(APIView):
+    """Get list of blocked users."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        blocks = Block.objects.filter(
+            blocker=request.user
+        ).select_related('blocked__status')
+
+        serializer = BlockSerializer(blocks, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class SetUserStatusView(APIView):
+    """Set user's online status and custom status."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        status_choice = request.data.get('status', 'online')
+        custom_status = request.data.get('custom_status', '')
+
+        # Validate status choice
+        valid_statuses = ['online', 'away', 'busy', 'offline']
+        if status_choice not in valid_statuses:
+            return Response(
+                {'detail': f'Invalid status. Must be one of: {valid_statuses}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate custom status length
+        if custom_status and len(custom_status) > 140:
+            return Response(
+                {'detail': 'Custom status must be 140 characters or less'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user_status, created = UserStatus.objects.update_or_create(
+            user=request.user,
+            defaults={
+                'status': status_choice,
+                'custom_status': custom_status if custom_status else None
+            }
+        )
+
+        serializer = UserStatusSerializer(user_status)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class GetUserStatusView(APIView):
+    """Get a user's status."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        try:
+            user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return Response(
+                {'detail': 'User not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Check if blocked
+        if Block.objects.filter(
+            models.Q(blocker=request.user, blocked=user) |
+            models.Q(blocker=user, blocked=request.user)
+        ).exists():
+            return Response(
+                {'detail': 'Cannot view status of blocked user'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            user_status = user.status
+            serializer = UserStatusSerializer(user_status)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except UserStatus.DoesNotExist:
+            # Return default offline status
+            return Response({
+                'username': user.username,
+                'status': 'offline',
+                'custom_status': None,
+                'is_online': False,
+                'last_seen': None
+            }, status=status.HTTP_200_OK)
