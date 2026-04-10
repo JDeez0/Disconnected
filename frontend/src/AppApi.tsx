@@ -263,3 +263,32 @@ export const getUserRooms = async () => {
   const response = await axios.get(`${API_ENDPOINT_BASE}/api/activity/rooms/`);
   return response.data
 }
+
+// Profile-related API functions
+export const getProfile = async () => {
+  const response = await axios.get(`${API_ENDPOINT_BASE}/api/profile/`);
+  return response.data
+}
+
+export const changePassword = async (csrfToken: string, oldPassword: string, newPassword: string) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/profile/change-password/`, {
+    old_password: oldPassword,
+    new_password: newPassword
+  }, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
+  return response.data
+}
+
+export const deleteAccount = async (csrfToken: string, password: string) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/profile/delete-account/`, {
+    password
+  }, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
+  return response.data
+}

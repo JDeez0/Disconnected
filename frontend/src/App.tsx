@@ -7,6 +7,7 @@ import ChatRoomList from './ChatRoomList';
 import ChatRoomDetail from './ChatRoomDetail';
 import ChatLayout from './ChatLayout';
 import ChatFriends from './ChatFriends';
+import ChatProfile from './ChatProfile';
 import CsrfContext from './CsrfContext';
 import AuthContext from './AuthContext';
 import ChatContext from './ChatContext';
@@ -552,6 +553,7 @@ const App: React.FC = () => {
                   <Route path="/" element={<ChatRoomList />} />
                   <Route path="/search" element={<ChatSearch fetchRoom={fetchRoom} />} />
                   <Route path="/friends" element={<ChatFriends />} />
+                  <Route path="/profile" element={<ChatProfile onLogout={onLoggedOut} />} />
                   <Route path="/rooms/:id" element={
                     <ChatRoomDetail
                       fetchRoom={fetchRoom}

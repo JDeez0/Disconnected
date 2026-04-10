@@ -884,3 +884,94 @@ class GetUserRoomsView(APIView):
         ]
 
         return Response(room_list, status=status.HTTP_200_OK)
+
+
+# ============ PROFILE VIEWS ============
+
+class ProfileView(APIView):
+    """Get current user's profile information."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from django.contrib.auth.models import User
+        
+        user = request.user
+        try:
+            activity = user.activity
+            activity_data = {
+                'name': activity.name,
+                'color': activity.color,
+                'is_expired': activity.is_expired()
+            }
+        except Activity.DoesNotExist:
+            activity_data = None
+
+        return Response({
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'date_joined': user.date_joined,
+            'activity': activity_data
+        }, status=status.HTTP_200_OK)
+
+
+class ChangePasswordView(APIView):
+    """Change current user's password."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        old_password = request.data.get('old_password')
+        new_password = request.data.get('new_password')
+
+        if not old_password or not new_password:
+            return Response(
+                {'detail': 'Old password and new password are required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if len(new_password) < 6:
+            return Response(
+                {'detail': 'New password must be at least 6 characters'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = request.user
+        if not user.check_password(old_password):
+            return Response(
+                {'detail': 'Incorrect old password'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.set_password(new_password)
+        user.save()
+
+        return Response({'message': 'Password changed successfully'}, status=status.HTTP_200_OK)
+
+
+class DeleteAccountView(APIView):
+    """Delete current user's account."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        password = request.data.get('password')
+
+        if not password:
+            return Response(
+                {'detail': 'Password is required to delete account'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = request.user
+        if not user.check_password(password):
+            return Response(
+                {'detail': 'Incorrect password'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        username = user.username
+        user.delete()
+
+        return Response(
+            {'message': f'Account {username} has been deleted'},
+            status=status.HTTP_200_OK
+        )

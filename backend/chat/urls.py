@@ -9,7 +9,8 @@ from .views import (
     BlockedUsersView, SetUserStatusView, GetUserStatusView,
     GetAvailableColorsView, CurrentActivityView, ClearActivityView,
     GetUserActivityView, ActivityPresetListView, ActivityPresetDetailView,
-    ApplyActivityPresetView, GetUserRoomsView
+    ApplyActivityPresetView, GetUserRoomsView,
+    ProfileView, ChangePasswordView, DeleteAccountView
 )
 
 
@@ -46,4 +47,9 @@ urlpatterns = [
     path('activity/presets/<int:preset_id>/', ActivityPresetDetailView.as_view(), name='activity-preset-detail'),
     path('activity/presets/<int:preset_id>/apply/', ApplyActivityPresetView.as_view(), name='apply-activity-preset'),
     path('activity/rooms/', GetUserRoomsView.as_view(), name='user-rooms'),
+
+    # Profile endpoints
+    path('profile/', ProfileView.as_view(), name='profile'),
+    path('profile/change-password/', ChangePasswordView.as_view(), name='change-password'),
+    path('profile/delete-account/', DeleteAccountView.as_view(), name='delete-account'),
 ]
