@@ -371,7 +371,15 @@ class FriendRequestsView(APIView):
 
         queryset = queryset.select_related('from_user__status', 'to_user__status')
         serializer = FriendRequestSerializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        # Add request direction fields for frontend filtering
+        results = []
+        for request_data in serializer.data:
+            request_data['request_sent_by_me'] = request_data['from_user']['id'] == request.user.pk
+            request_data['request_received'] = request_data['to_user']['id'] == request.user.pk
+            results.append(request_data)
+        
+        return Response(results, status=status.HTTP_200_OK)
 
 
 class SendFriendRequestView(APIView):
