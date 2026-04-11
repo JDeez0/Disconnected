@@ -138,38 +138,66 @@ export const getFriendRequests = async (type: 'all' | 'sent' | 'received' = 'all
   return response.data
 }
 
-export const sendFriendRequest = async (userId: number) => {
-  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/request/send/${userId}/`);
+export const sendFriendRequest = async (csrfToken: string, userId: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/request/send/${userId}/`, {}, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
   return response.data
 }
 
-export const acceptFriendRequest = async (requestId: number) => {
-  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/request/accept/${requestId}/`);
+export const acceptFriendRequest = async (csrfToken: string, requestId: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/request/accept/${requestId}/`, {}, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
   return response.data
 }
 
-export const rejectFriendRequest = async (requestId: number) => {
-  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/request/reject/${requestId}/`);
+export const rejectFriendRequest = async (csrfToken: string, requestId: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/request/reject/${requestId}/`, {}, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
   return response.data
 }
 
-export const cancelFriendRequest = async (requestId: number) => {
-  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/request/cancel/${requestId}/`);
+export const cancelFriendRequest = async (csrfToken: string, requestId: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/request/cancel/${requestId}/`, {}, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
   return response.data
 }
 
-export const unfriend = async (userId: number) => {
-  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/unfriend/${userId}/`);
+export const unfriend = async (csrfToken: string, userId: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/unfriend/${userId}/`, {}, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
   return response.data
 }
 
-export const blockUser = async (userId: number) => {
-  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/block/${userId}/`);
+export const blockUser = async (csrfToken: string, userId: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/block/${userId}/`, {}, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
   return response.data
 }
 
-export const unblockUser = async (userId: number) => {
-  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/unblock/${userId}/`);
+export const unblockUser = async (csrfToken: string, userId: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/unblock/${userId}/`, {}, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
   return response.data
 }
 

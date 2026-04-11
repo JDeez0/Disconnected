@@ -173,7 +173,7 @@ const ChatFriends: React.FC = () => {
 
   const handleSendRequest = async (userId: number) => {
     try {
-      await sendFriendRequest(userId);
+      await sendFriendRequest(csrf, userId);
       setSearchResults(prev =>
         prev.map(user =>
           user.id === userId
@@ -189,7 +189,7 @@ const ChatFriends: React.FC = () => {
 
   const handleAcceptRequest = async (requestId: number) => {
     try {
-      await acceptFriendRequest(requestId);
+      await acceptFriendRequest(csrf, requestId);
       loadFriendRequests();
       loadFriends();
     } catch (err: any) {
@@ -199,7 +199,7 @@ const ChatFriends: React.FC = () => {
 
   const handleRejectRequest = async (requestId: number) => {
     try {
-      await rejectFriendRequest(requestId);
+      await rejectFriendRequest(csrf, requestId);
       loadFriendRequests();
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to reject request');
@@ -208,7 +208,7 @@ const ChatFriends: React.FC = () => {
 
   const handleCancelRequest = async (requestId: number) => {
     try {
-      await cancelFriendRequest(requestId);
+      await cancelFriendRequest(csrf, requestId);
       loadFriendRequests();
       setSearchResults(prev =>
         prev.map(user =>
@@ -225,7 +225,7 @@ const ChatFriends: React.FC = () => {
   const handleUnfriend = async (userId: number) => {
     if (!confirm('Are you sure you want to unfriend this user?')) return;
     try {
-      await unfriend(userId);
+      await unfriend(csrf, userId);
       loadFriends();
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to unfriend');
@@ -235,7 +235,7 @@ const ChatFriends: React.FC = () => {
   const handleBlock = async (userId: number) => {
     if (!confirm('Are you sure you want to block this user?')) return;
     try {
-      await blockUser(userId);
+      await blockUser(csrf, userId);
       loadBlockedUsers();
       loadFriends();
       setSearchResults(prev => prev.filter(u => u.id !== userId));
@@ -246,7 +246,7 @@ const ChatFriends: React.FC = () => {
 
   const handleUnblock = async (userId: number) => {
     try {
-      await unblockUser(userId);
+      await unblockUser(csrf, userId);
       loadBlockedUsers();
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to unblock user');
