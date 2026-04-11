@@ -7,24 +7,6 @@ const ChatRoomList = () => {
 
   return (
     <div id="chat-rooms">
-      <div style={{ padding: '20px' }}>
-        <Link 
-          to="/search" 
-          style={{
-            display: 'inline-block',
-            padding: '12px 24px',
-            backgroundColor: '#4CAF50',
-            color: 'white',
-            textDecoration: 'none',
-            borderRadius: '6px',
-            fontSize: '14px',
-            fontWeight: 500,
-            cursor: 'pointer'
-          }}
-        >
-          Discover
-        </Link>
-      </div>
       {state.rooms.map((roomId: number) => {
         const room = state.roomsById[roomId]
         return <div className="chat-room-block" key={room.id}>
@@ -47,6 +29,24 @@ const ChatRoomList = () => {
           </Link>
         </div>
       })}
+      <div style={{ padding: '20px' }}>
+        <Link 
+          to="/search" 
+          style={{
+            display: 'inline-block',
+            padding: '12px 24px',
+            backgroundColor: '#4CAF50',
+            color: 'white',
+            textDecoration: 'none',
+            borderRadius: '6px',
+            fontSize: '14px',
+            fontWeight: 500,
+            cursor: 'pointer'
+          }}
+        >
+          Discover
+        </Link>
+      </div>
     </div>
   );
 };
