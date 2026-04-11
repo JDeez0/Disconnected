@@ -607,7 +607,7 @@ const ChatProfile: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
         <div>
           <h1 className="profile-title">Profile</h1>
         </div>
-        <button className="close-button" onClick={() => navigate('/friends')}>
+        <button className="close-button" onClick={() => navigate('/')}>
           ✕
         </button>
       </div>
@@ -644,6 +644,22 @@ const ChatProfile: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           }}
         >
           {showPasswordForm ? 'Cancel' : 'Change Password'}
+        </button>
+
+        <button
+          onClick={() => navigate('/friends')}
+          style={{
+            marginTop: '15px',
+            padding: '10px 20px',
+            background: '#2196F3',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px'
+          }}
+        >
+          Go to Friends
         </button>
 
         {showPasswordForm && (
