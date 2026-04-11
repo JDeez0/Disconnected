@@ -646,22 +646,6 @@ const ChatProfile: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
           {showPasswordForm ? 'Cancel' : 'Change Password'}
         </button>
 
-        <button
-          onClick={() => navigate('/friends')}
-          style={{
-            marginTop: '15px',
-            padding: '10px 20px',
-            background: '#2196F3',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontSize: '14px'
-          }}
-        >
-          Go to Friends
-        </button>
-
         {showPasswordForm && (
           <form className="password-form" onSubmit={handlePasswordChange}>
             <div className="form-group">
@@ -710,6 +694,29 @@ const ChatProfile: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
             </div>
           </form>
         )}
+      </div>
+
+      {/* Friends Section */}
+      <div className="profile-section">
+        <h2 className="section-title">Friends</h2>
+        <p style={{ color: '#666', fontSize: '14px', marginBottom: '15px' }}>
+          Manage your friends, send requests, and see what your friends are up to.
+        </p>
+        <button
+          onClick={() => navigate('/friends')}
+          style={{
+            padding: '12px 24px',
+            background: '#2196F3',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px',
+            fontWeight: 500
+          }}
+        >
+          Friends
+        </button>
       </div>
 
       {/* Activity Section */}
