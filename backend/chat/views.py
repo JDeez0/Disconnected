@@ -3,6 +3,7 @@ import logging
 import requests
 from requests.adapters import HTTPAdapter, Retry
 from django.conf import settings
+from django.contrib.auth.models import User
 from django.db import transaction, models
 from django.db.models import Exists, OuterRef, Count
 from django.shortcuts import get_object_or_404
@@ -893,8 +894,6 @@ class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from django.contrib.auth.models import User
-        
         user = request.user
         try:
             activity = user.activity
