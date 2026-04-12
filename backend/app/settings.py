@@ -68,7 +68,7 @@ CENTRIFUGO_HTTP_API_KEY = 'api_key'
 #                not use LISTEN/NOTIFY trigger), but we skipped such combination here.
 #
 # REMEMBER to also update Centrifugo consumer configuration when switching the mode.
-CENTRIFUGO_BROADCAST_MODE = 'api_cdc'
+CENTRIFUGO_BROADCAST_MODE = 'api'
 # CENTRIFUGO_OUTBOX_PARTITIONS is the number of partitions in "outbox" broadcast mode case,
 # must match Centrifigo PostgreSQL consumer configuration.
 # Partitions start from 0, so if CENTRIFUGO_OUTBOX_PARTITIONS is 1, then the actual
@@ -103,6 +103,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -149,11 +150,14 @@ WSGI_APPLICATION = 'app.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'grandchat',
-        'USER': 'grandchat',
-        'PASSWORD': 'grandchat',
-        'HOST': 'db',
-        'PORT': '5432',
+        'NAME': os.environ.get('DB_NAME', 'grandchat'),
+        'USER': os.environ.get('DB_USER', 'grandchat'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', 'grandchat'),
+        'HOST': os.environ.get('DB_HOST', 'db'),
+        'PORT': os.environ.get('DB_PORT', '5432'),
+        'OPTIONS': {
+            'sslmode': 'require',
+        }
     }
 }
 

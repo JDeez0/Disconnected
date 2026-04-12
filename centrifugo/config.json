@@ -5,17 +5,18 @@
     "secret": "secret"
   },
   "engine": {
+    "type": "redis",
     "redis": {
       "address": "redis:6379"
-    },
-    "type": "memory"
+    }
   },
   "client": {
     "token": {
       "hmac_secret_key": "secret"
     },
     "allowed_origins": [
-      "http://localhost:9000"
+      "http://localhost:9000",
+      "http://localhost:19006"
     ]
   },
   "prometheus": {
@@ -24,7 +25,7 @@
     "channel_namespace_resolution": true
   },
   "log": {
-    "level": "debug"
+    "level": "info"
   },
   "http_server": {
     "address": "0.0.0.0"
@@ -42,41 +43,7 @@
       }
     ]
   },
-  "consumers": [
-    {
-      "name": "postgresql",
-      "type": "postgresql",
-      "postgresql": {
-        "dsn": "postgresql://grandchat:grandchat@db:5432/grandchat?sslmode=disable",
-        "outbox_table_name": "chat_outbox",
-        "num_partitions": 1,
-        "partition_select_limit": 100,
-        "partition_poll_interval": "300ms",
-        "partition_notification_channel": "centrifugo_partition_change"
-      },
-      "enabled": true
-    },
-    {
-      "name": "kafka",
-      "type": "kafka",
-      "kafka": {
-        "brokers": [
-          "kafka:9092"
-        ],
-        "topics": [
-          "postgres.public.chat_cdc"
-        ],
-        "consumer_group": "centrifugo"
-      },
-      "enabled": true
-    }
-  ],
-  "database": {
-    "enabled": false,
-    "postgresql": {
-      "dsn": "postgresql://grandchat:grandchat@db:5432/grandchat"
-    }
-  },
+  "consumers": [],
   "push_notifications": {
     "enabled": false,
     "queue": {
