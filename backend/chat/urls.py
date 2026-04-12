@@ -1,7 +1,7 @@
 from django.urls import path
 
 from .views import (
-    RoomListViewSet, RoomDetailViewSet, RoomSearchViewSet,
+    RoomListViewSet, RoomDetailViewSet, RoomSearchViewSet, RoomCreateViewSet,
     MessageListCreateAPIView, JoinRoomView, LeaveRoomView,
     SearchUsersView, FriendsListView, FriendRequestsView,
     SendFriendRequestView, AcceptFriendRequestView, RejectFriendRequestView,
@@ -10,6 +10,7 @@ from .views import (
     GetAvailableColorsView, CurrentActivityView, ClearActivityView,
     GetUserActivityView, ActivityPresetListView, ActivityPresetDetailView,
     ApplyActivityPresetView, GetUserRoomsView,
+    SubmitScreenTimeView, GroupLeaderboardView,
     ProfileView, ChangePasswordView, DeleteAccountView
 )
 
@@ -17,11 +18,13 @@ from .views import (
 urlpatterns = [
     # Room-related endpoints
     path('rooms/', RoomListViewSet.as_view({'get': 'list'}), name='room-list'),
+    path('rooms/create/', RoomCreateViewSet.as_view({'post': 'create'}), name='room-create'),
     path('rooms/<int:pk>/', RoomDetailViewSet.as_view({'get': 'retrieve'}), name='room-detail'),
     path('search/', RoomSearchViewSet.as_view({'get': 'list'}), name='room-search'),
     path('rooms/<int:room_id>/messages/', MessageListCreateAPIView.as_view(), name='room-messages'),
     path('rooms/<int:room_id>/join/', JoinRoomView.as_view(), name='join-room'),
     path('rooms/<int:room_id>/leave/', LeaveRoomView.as_view(), name='leave-room'),
+    path('rooms/<int:room_id>/leaderboard/', GroupLeaderboardView.as_view(), name='room-leaderboard'),
 
     # Friend-related endpoints
     path('friends/search/', SearchUsersView.as_view(), name='friends-search'),
@@ -47,6 +50,7 @@ urlpatterns = [
     path('activity/presets/<int:preset_id>/', ActivityPresetDetailView.as_view(), name='activity-preset-detail'),
     path('activity/presets/<int:preset_id>/apply/', ApplyActivityPresetView.as_view(), name='apply-activity-preset'),
     path('activity/rooms/', GetUserRoomsView.as_view(), name='user-rooms'),
+    path('activity/screen-time/', SubmitScreenTimeView.as_view(), name='submit-screen-time'),
 
     # Profile endpoints
     path('profile/', ProfileView.as_view(), name='profile'),

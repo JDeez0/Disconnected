@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     Room, RoomMember, Message, Friendship, FriendRequest, Block, UserStatus,
-    Activity, ActivityPreset, ACTIVITY_COLORS
+    Activity, ActivityPreset, ACTIVITY_COLORS, DailyScreenTime
 )
 from django.contrib.auth.models import User
 from django.shortcuts import get_object_or_404
@@ -26,13 +26,15 @@ class LastMessageSerializer(serializers.ModelSerializer):
 class RoomSerializer(serializers.ModelSerializer):
     member_count = serializers.SerializerMethodField()
     last_message = LastMessageSerializer(read_only=True)
+    founder_username = serializers.CharField(source='founder.username', read_only=True)
 
     def get_member_count(self, obj):
-        return obj.member_count
+        return getattr(obj, 'member_count', 0)
 
     class Meta:
         model = Room
-        fields = ['id', 'name', 'version', 'bumped_at', 'member_count', 'last_message']
+        fields = ['id', 'name', 'password', 'color', 'founder', 'founder_username', 'timezone', 'version', 'bumped_at', 'member_count', 'last_message']
+        read_only_fields = ['id', 'version', 'bumped_at', 'member_count', 'last_message', 'founder_username']
 
 
 class MessageRoomSerializer(serializers.ModelSerializer):
@@ -148,27 +150,19 @@ class BlockSerializer(serializers.ModelSerializer):
 
 
 class ActivitySerializer(serializers.ModelSerializer):
-    visible_room_ids = serializers.SerializerMethodField()
     is_expired = serializers.SerializerMethodField()
-    room_names = serializers.SerializerMethodField()
-
-    def get_visible_room_ids(self, obj):
-        return list(obj.rooms.values_list('id', flat=True))
 
     def get_is_expired(self, obj):
         return obj.is_expired()
 
-    def get_room_names(self, obj):
-        return list(obj.rooms.values_list('name', flat=True))
-
     class Meta:
         model = Activity
         fields = [
-            'id', 'name', 'color', 'visibility_type', 'visible_room_ids',
-            'room_names', 'duration_type', 'expires_at', 'is_expired',
-            'created_at', 'updated_at'
+            'id', 'name', 'color', 'visibility_type',
+            'duration_type', 'expires_at', 'is_expired',
+            'created_at'
         ]
-        read_only_fields = ['created_at', 'updated_at']
+        read_only_fields = ['created_at']
 
 
 class ActivityPresetSerializer(serializers.ModelSerializer):
@@ -189,7 +183,7 @@ class UserActivitySerializer(serializers.ModelSerializer):
         
         try:
             activity = obj.activity
-            if activity.is_visible_to(request.user) and not activity.is_expired():
+            if not activity.is_expired():
                 return {
                     'name': activity.name,
                     'color': activity.color,
@@ -205,17 +199,12 @@ class UserActivitySerializer(serializers.ModelSerializer):
 
 class ActivityCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating/updating an activity."""
-    room_ids = serializers.ListField(
-        child=serializers.IntegerField(),
-        required=False,
-        write_only=True
-    )
     save_as_preset = serializers.BooleanField(required=False, default=False)
 
     class Meta:
         model = Activity
         fields = [
-            'name', 'color', 'visibility_type', 'room_ids',
+            'name', 'color', 'visibility_type',
             'duration_type', 'save_as_preset'
         ]
 
@@ -227,34 +216,10 @@ class ActivityCreateSerializer(serializers.ModelSerializer):
         return value.strip()
 
     def validate(self, data):
-        request = self.context.get('request')
-        visibility_type = data.get('visibility_type', 'all_friends')
-        room_ids = data.get('room_ids', [])
-
-        if visibility_type == 'specific_rooms' and not room_ids:
-            raise serializers.ValidationError(
-                "Room IDs must be provided when visibility type is 'specific_rooms'"
-            )
-
-        # Validate that user is a member of the specified rooms
-        if room_ids:
-            user_room_ids = set(
-                RoomMember.objects.filter(
-                    user=request.user,
-                    room_id__in=room_ids
-                ).values_list('room_id', flat=True)
-            )
-            invalid_room_ids = set(room_ids) - user_room_ids
-            if invalid_room_ids:
-                raise serializers.ValidationError(
-                    f"User is not a member of rooms: {list(invalid_room_ids)}"
-                )
-
         return data
 
     def create(self, validated_data):
         request = self.context.get('request')
-        room_ids = validated_data.pop('room_ids', [])
         save_as_preset = validated_data.pop('save_as_preset', False)
         duration_type = validated_data.get('duration_type', 'indefinite')
 
@@ -273,10 +238,6 @@ class ActivityCreateSerializer(serializers.ModelSerializer):
         # Create new activity
         activity = Activity.objects.create(user=request.user, **validated_data)
 
-        # Add rooms if specified
-        if room_ids:
-            activity.rooms.set(room_ids)
-
         # Save as preset if requested
         if save_as_preset:
             ActivityPreset.objects.get_or_create(
@@ -289,7 +250,6 @@ class ActivityCreateSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         request = self.context.get('request')
-        room_ids = validated_data.pop('room_ids', None)
         save_as_preset = validated_data.pop('save_as_preset', False)
         duration_type = validated_data.get('duration_type', instance.duration_type)
 
@@ -308,10 +268,6 @@ class ActivityCreateSerializer(serializers.ModelSerializer):
 
         instance.save()
 
-        # Update rooms if provided
-        if room_ids is not None:
-            instance.rooms.set(room_ids)
-
         # Save as preset if requested
         if save_as_preset:
             ActivityPreset.objects.get_or_create(
@@ -327,3 +283,28 @@ class ActivityPublicSerializer(serializers.Serializer):
     """Minimal serializer for public view of activity."""
     name = serializers.CharField(max_length=35)
     color = serializers.CharField(max_length=7)
+
+
+class DailyScreenTimeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DailyScreenTime
+        fields = ['id', 'hours', 'minutes', 'date', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'date', 'created_at', 'updated_at']
+
+
+class LeaderboardEntrySerializer(serializers.Serializer):
+    user_id = serializers.IntegerField()
+    username = serializers.CharField()
+    hours = serializers.IntegerField()
+    minutes = serializers.IntegerField()
+    total_minutes = serializers.IntegerField()
+    rank = serializers.IntegerField()
+    is_me = serializers.SerializerMethodField()
+    has_submitted = serializers.BooleanField(default=False)
+    activity = ActivityPublicSerializer(required=False, allow_null=True)
+
+    def get_is_me(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj['user_id'] == request.user.id
+        return False

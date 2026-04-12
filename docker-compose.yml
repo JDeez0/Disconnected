@@ -27,11 +27,11 @@ services:
     expose:
       - 8000
     environment:
-      - DB_NAME=postgres
-      - DB_USER=postgres.zspnixccneconhqgaatg
-      - DB_PASSWORD=REPLACE_WITH_YOUR_SUPABASE_PASSWORD
-      - DB_HOST=aws-1-us-east-1.pooler.supabase.com
-      - DB_PORT=6543
+      - DB_NAME=grandchat
+      - DB_USER=grandchat
+      - DB_PASSWORD=grandchat
+      - DB_HOST=db
+      - DB_PORT=5432
       - CENTRIFUGO_TOKEN_SECRET=secret
       - CENTRIFUGO_HTTP_API_KEY=api_key
       - CENTRIFUGO_HTTP_API_ENDPOINT=http://centrifugo:8000
@@ -42,14 +42,16 @@ services:
   migrations:
     build: ./backend
     restart: on-failure
+    volumes:
+      - ./backend:/usr/src/app
     command: >
       python manage.py migrate
     environment:
-      - DB_NAME=postgres
-      - DB_USER=postgres.zspnixccneconhqgaatg
-      - DB_PASSWORD=REPLACE_WITH_YOUR_SUPABASE_PASSWORD
-      - DB_HOST=aws-1-us-east-1.pooler.supabase.com
-      - DB_PORT=6543
+      - DB_NAME=grandchat
+      - DB_USER=grandchat
+      - DB_PASSWORD=grandchat
+      - DB_HOST=db
+      - DB_PORT=5432
     depends_on:
       db:
         condition: service_healthy

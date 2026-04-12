@@ -51,17 +51,19 @@ export const getSubscriptionToken = async (channel: string) => {
   return response.data.token;
 }
 
-export const getRooms = async () => {
+export const getGroups = async () => {
   const response = await axios.get(`${API_ENDPOINT_BASE}/api/rooms/`);
   return response.data.results
 };
 
-export const searchRooms = async () => {
-  const response = await axios.get(`${API_ENDPOINT_BASE}/api/search/`);
+export const searchGroups = async (query: string = '') => {
+  const response = await axios.get(`${API_ENDPOINT_BASE}/api/search/`, {
+    params: { q: query }
+  });
   return response.data.results
 };
 
-export const getRoom = async (roomId: string) => {
+export const getGroup = async (roomId: string) => {
   const response = await axios.get(`${API_ENDPOINT_BASE}/api/rooms/${roomId}/`);
   return response.data
 };
@@ -82,17 +84,17 @@ export const addMessage = async (csrfToken: string, roomId: string, content: str
   return response.data
 }
 
-export const joinRoom = async (csrfToken: string, roomId: string) => {
-  const response = await axios.post(`${API_ENDPOINT_BASE}/api/rooms/${roomId}/join/`, {}, {
+export const createGroup = async (csrfToken: string, name: string, password: string = '', color: string = '#3280b4', timezone: string = 'UTC') => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/rooms/create/`, { name, password, color, timezone }, {
     headers: {
-      'X-CSRFToken': csrfToken
+      "X-CSRFToken": csrfToken
     }
   });
   return response.data
 }
 
-export const leaveRoom = async (csrfToken: string, roomId: string) => {
-  const response = await axios.post(`${API_ENDPOINT_BASE}/api/rooms/${roomId}/leave/`, {}, {
+export const joinGroup = async (csrfToken: string, roomId: string, password: string = '') => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/rooms/${roomId}/join/`, { password }, {
     headers: {
       'X-CSRFToken': csrfToken
     }
@@ -245,6 +247,15 @@ export const updateCurrentActivity = async (csrfToken: string, activityData: any
   return response.data
 }
 
+export const submitScreenTime = async (csrfToken: string, hours: number, minutes: number) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/activity/screen-time/`, { hours, minutes }, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
+  return response.data
+}
+
 export const clearActivity = async (csrfToken: string) => {
   const response = await axios.post(`${API_ENDPOINT_BASE}/api/activity/clear/`, {}, {
     headers: {
@@ -300,8 +311,13 @@ export const applyActivityPreset = async (csrfToken: string, presetId: number, a
   return response.data
 }
 
-export const getUserRooms = async () => {
+export const getUserGroups = async () => {
   const response = await axios.get(`${API_ENDPOINT_BASE}/api/activity/rooms/`);
+  return response.data
+}
+
+export const getGroupLeaderboard = async (roomId: string) => {
+  const response = await axios.get(`${API_ENDPOINT_BASE}/api/rooms/${roomId}/leaderboard/`);
   return response.data
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   StyleSheet, Text, View, FlatList, TextInput, 
   TouchableOpacity, KeyboardAvoidingView, Platform, 
@@ -9,18 +9,33 @@ import { getMessages, addMessage, getConnectionToken, getSubscriptionToken } fro
 import { WS_ENDPOINT } from '../api/AppSettings';
 import { Theme } from '../context/Theme';
 import { Ionicons } from '@expo/vector-icons';
+import GroupInfoModal from '../components/GroupInfoModal';
+import { useAuth } from '../context/AuthContext';
 
-export default function RoomDetailScreen({ route, navigation }) {
-  const { roomId, roomName } = route.params;
+export default function GroupDetailScreen({ route, navigation }) {
+  const { roomId, roomName, roomColor } = route.params;
+  const { csrf } = useAuth();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
+  
   const centrifugeRef = useRef(null);
   const flatListRef = useRef(null);
 
   useEffect(() => {
-    navigation.setOptions({ title: roomName });
+    navigation.setOptions({ 
+      title: roomName,
+      headerRight: () => (
+        <TouchableOpacity 
+          style={[styles.headerPrism, { backgroundColor: roomColor || Theme.colors.primary }]}
+          onPress={() => setInfoModalVisible(true)}
+        >
+          <Ionicons name="trophy" size={18} color="#fff" />
+        </TouchableOpacity>
+      )
+    });
     loadMessages();
     setupRealtime();
 
@@ -29,12 +44,12 @@ export default function RoomDetailScreen({ route, navigation }) {
         centrifugeRef.current.disconnect();
       }
     };
-  }, [roomId]);
+  }, [roomId, roomColor]);
 
   const loadMessages = async () => {
     try {
       const data = await getMessages(roomId);
-      setMessages(data.reverse()); // Reversed for FlatList inverted
+      setMessages(data); // Newest at index 0, appears at bottom with inverted={true}
     } catch (err) {
       console.error('Failed to load messages:', err);
     } finally {
@@ -70,8 +85,7 @@ export default function RoomDetailScreen({ route, navigation }) {
 
     setSending(true);
     try {
-      // In our current setup, we wait for the broadcast to show the message
-      await addMessage('', roomId, inputText); // CSRF handled in AppApi
+      await addMessage(csrf, roomId, inputText);
       setInputText('');
     } catch (err) {
       console.error('Send failed:', err);
@@ -113,7 +127,7 @@ export default function RoomDetailScreen({ route, navigation }) {
           data={messages}
           keyExtractor={(item, index) => item.id?.toString() || index.toString()}
           renderItem={renderMessage}
-          inverted={true} // Chat style (latest at bottom)
+          inverted={true}
           contentContainerStyle={styles.messageList}
         />
 
@@ -139,6 +153,13 @@ export default function RoomDetailScreen({ route, navigation }) {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      <GroupInfoModal 
+        visible={infoModalVisible}
+        onClose={() => setInfoModalVisible(false)}
+        group={{ id: roomId, name: roomName, color: roomColor }}
+        csrf={csrf}
+      />
     </SafeAreaView>
   );
 }
@@ -156,6 +177,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: Theme.colors.background,
+  },
+  headerPrism: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+    borderRadius: 6,
+    transform: [{ rotate: '45deg' }],
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   messageList: {
     padding: 15,

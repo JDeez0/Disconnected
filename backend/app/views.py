@@ -11,6 +11,7 @@ from django.middleware.csrf import get_token
 from django.views.decorators.http import require_POST
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from chat.models import RoomMember
 
 
 def get_csrf(request):
@@ -35,7 +36,21 @@ def get_subscription_token(request):
         return JsonResponse({'detail': 'unauthorized'}, status=401)
 
     channel = request.GET.get('channel')
-    if channel != f'personal:{request.user.pk}':
+    if not channel:
+        return JsonResponse({'detail': 'channel required'}, status=400)
+
+    # Allow personal channels
+    if channel == f'personal:{request.user.pk}':
+        pass
+    # Allow room (group) channels if user is a member
+    elif channel.startswith('rooms:'):
+        try:
+            room_id = int(channel.split(':')[1])
+            if not RoomMember.objects.filter(user=request.user, room_id=room_id).exists():
+                return JsonResponse({'detail': 'permission denied (not a member)'}, status=403)
+        except (IndexError, ValueError):
+            return JsonResponse({'detail': 'invalid channel format'}, status=400)
+    else:
         return JsonResponse({'detail': 'permission denied'}, status=403)
 
     token_claims = {

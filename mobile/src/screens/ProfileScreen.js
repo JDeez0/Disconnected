@@ -1,29 +1,96 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   StyleSheet, Text, View, TouchableOpacity, 
-  ScrollView, SafeAreaView, ActivityIndicator, Alert, Platform 
+  ScrollView, SafeAreaView, ActivityIndicator, Alert, Platform,
+  Modal, TextInput, FlatList
 } from 'react-native';
-import { getProfile, logout } from '../api/AppApi';
+import { useFocusEffect } from '@react-navigation/native';
+import { getProfile, logout, getAvailableColors, updateCurrentActivity, clearActivity } from '../api/AppApi';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
 
-export default function ProfileScreen({ onLogout, csrf }) {
+export default function ProfileScreen() {
+  const { csrf, setAuthenticated, fetchCsrf } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Activity Edit State
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [activityName, setActivityName] = useState('');
+  const [selectedColor, setSelectedColor] = useState('#4CAF50');
+  const [availableColors, setAvailableColors] = useState([]);
+  const [savingActivity, setSavingActivity] = useState(false);
+
+  const [duration, setDuration] = useState('indefinite');
+
   const loadData = async () => {
     try {
-      const data = await getProfile();
-      setProfile(data);
+      const [profileData, colors] = await Promise.all([
+        getProfile(),
+        getAvailableColors()
+      ]);
+      setProfile(profileData);
+      setAvailableColors(colors || []);
+      
+      if (profileData?.activity) {
+        setActivityName(profileData.activity.name);
+        setSelectedColor(profileData.activity.color);
+      }
     } catch (err) {
-      console.error('Failed to load profile:', err);
+      console.error('Failed to load profile data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveActivity = async () => {
+    if (!activityName.trim()) {
+      Alert.alert('Error', 'Please enter an activity name');
+      return;
+    }
+
+    setSavingActivity(true);
+    try {
+      await updateCurrentActivity(csrf, {
+        name: activityName.trim(),
+        color: selectedColor,
+        visibility_type: 'all_friends',
+        duration_type: duration
+      });
+      setEditModalVisible(false);
+      loadData();
+    } catch (err) {
+      console.error('Failed to save activity:', err);
+      Alert.alert('Error', 'Failed to save activity');
+    } finally {
+      setSavingActivity(false);
+    }
+  };
+
+  const handleClearActivity = async () => {
+    setSavingActivity(true);
+    try {
+      await clearActivity(csrf);
+      setActivityName('');
+      setEditModalVisible(false);
+      loadData();
+    } catch (err) {
+      console.error('Failed to clear activity:', err);
+      Alert.alert('Error', 'Failed to clear activity');
+    } finally {
+      setSavingActivity(false);
     }
   };
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [])
+  );
 
   const handleLogout = async () => {
     const performLogout = async () => {
@@ -32,7 +99,8 @@ export default function ProfileScreen({ onLogout, csrf }) {
       } catch (err) {
         console.error('Logout API failed:', err);
       } finally {
-        onLogout();
+        setAuthenticated(false);
+        await fetchCsrf();
       }
     };
 
@@ -79,13 +147,16 @@ export default function ProfileScreen({ onLogout, csrf }) {
             <View 
               style={[
                 styles.activityIndicator, 
-                { backgroundColor: profile?.activity?.color || '#4DD0E1' }
+                { backgroundColor: profile?.activity?.color || '#4caf50' }
               ]} 
             />
             <Text style={styles.activityText}>
               {profile?.activity ? profile.activity.name : 'No activity set'}
             </Text>
-            <TouchableOpacity style={styles.editButton}>
+            <TouchableOpacity 
+              style={styles.editButton}
+              onPress={() => setEditModalVisible(true)}
+            >
               <Text style={styles.editButtonText}>Edit</Text>
             </TouchableOpacity>
           </View>
@@ -96,6 +167,89 @@ export default function ProfileScreen({ onLogout, csrf }) {
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Edit Activity Modal */}
+      <Modal visible={editModalVisible} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Set Activity</Text>
+            
+            <TextInput
+              style={styles.modalInput}
+              placeholder="What are you doing?"
+              placeholderTextColor="#666"
+              value={activityName}
+              onChangeText={setActivityName}
+              maxLength={35}
+            />
+
+            <Text style={styles.label}>Choose Color</Text>
+            <View style={styles.colorGrid}>
+              {availableColors.map((color) => (
+                <TouchableOpacity
+                  key={color}
+                  style={[
+                    styles.colorOption,
+                    { backgroundColor: color },
+                    selectedColor === color && styles.selectedColorOption
+                  ]}
+                  onPress={() => setSelectedColor(color)}
+                />
+              ))}
+            </View>
+
+            <Text style={styles.label}>Duration</Text>
+            <View style={styles.durationRow}>
+              {['hour', 'day', 'indefinite'].map((d) => (
+                <TouchableOpacity
+                  key={d}
+                  style={[
+                    styles.durationButton,
+                    duration === d && styles.activeDurationButton
+                  ]}
+                  onPress={() => setDuration(d)}
+                >
+                  <Text style={[
+                    styles.durationButtonText,
+                    duration === d && styles.activeDurationText
+                  ]}>
+                    {d.charAt(0).toUpperCase() + d.slice(1)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={styles.modalButton} 
+                onPress={() => setEditModalVisible(false)}
+              >
+                <Text style={{ color: '#fff' }}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.modalButton, { backgroundColor: '#f44336' }]} 
+                onPress={handleClearActivity}
+                disabled={savingActivity}
+              >
+                <Text style={{ color: '#fff' }}>Clear</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={[styles.modalButton, { backgroundColor: '#3280b4' }]} 
+                onPress={handleSaveActivity}
+                disabled={savingActivity}
+              >
+                {savingActivity ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -118,4 +272,19 @@ const styles = StyleSheet.create({
   editButtonText: { color: '#fff', fontWeight: '600' },
   logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f44336', padding: 15, borderRadius: 12, marginTop: 20 },
   logoutText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalContent: { backgroundColor: '#161a21', width: '100%', maxWidth: 400, borderRadius: 20, padding: 25, borderWidth: 1, borderColor: '#273247' },
+  modalTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 20, textAlign: 'center' },
+  modalInput: { backgroundColor: '#273247', color: '#fff', borderRadius: 10, padding: 15, marginBottom: 20, fontSize: 16 },
+  label: { color: '#3280b4', fontSize: 14, fontWeight: 'bold', textTransform: 'uppercase', marginBottom: 10 },
+  colorGrid: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 20 },
+  colorOption: { width: 35, height: 35, borderRadius: 17.5, marginRight: 10, marginBottom: 10, borderWidth: 2, borderColor: 'transparent' },
+  selectedColorOption: { borderColor: '#fff' },
+  durationRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 25 },
+  durationButton: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8, backgroundColor: '#273247', marginHorizontal: 4 },
+  activeDurationButton: { backgroundColor: '#3280b4' },
+  durationButtonText: { color: '#666', fontWeight: '600' },
+  activeDurationText: { color: '#fff' },
+  modalButtons: { flexDirection: 'row', justifyContent: 'space-between' },
+  modalButton: { flex: 1, padding: 15, borderRadius: 10, alignItems: 'center', marginHorizontal: 5, backgroundColor: '#444' },
 });
