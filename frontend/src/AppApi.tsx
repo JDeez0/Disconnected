@@ -3,11 +3,12 @@ import { API_ENDPOINT_BASE } from "./AppSettings";
 
 export const getCSRFToken = async (): Promise<string> => {
   const res = await axios.get(`${API_ENDPOINT_BASE}/api/csrf/`, {});
-  const headers = res.headers
-  if (headers instanceof AxiosHeaders && headers.has('X-CSRFToken')) {
-    return headers.get("X-CSRFToken") as string
+  // Axios 1.x headers.get is case-insensitive
+  const token = res.headers.get ? res.headers.get('X-CSRFToken') : (res.headers as any)['x-csrftoken'];
+  if (token) {
+    return token as string;
   }
-  throw new Error('no X-CSRFToken in headers')
+  throw new Error('no X-CSRFToken in headers');
 };
 
 export const login = async (csrfToken: string, username: string, password: string) => {
@@ -206,10 +207,14 @@ export const getBlockedUsers = async () => {
   return response.data
 }
 
-export const setUserStatus = async (status: 'online' | 'away' | 'busy' | 'offline', customStatus?: string) => {
+export const setUserStatus = async (csrfToken: string, status: 'online' | 'away' | 'busy' | 'offline', customStatus?: string) => {
   const response = await axios.post(`${API_ENDPOINT_BASE}/api/friends/status/set/`, {
     status,
     custom_status: customStatus || ''
+  }, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
   });
   return response.data
 }
@@ -267,23 +272,39 @@ export const getActivityPresets = async () => {
   return response.data
 }
 
-export const createActivityPreset = async (presetData: any) => {
-  const response = await axios.post(`${API_ENDPOINT_BASE}/api/activity/presets/`, presetData);
+export const createActivityPreset = async (csrfToken: string, presetData: any) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/activity/presets/`, presetData, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
   return response.data
 }
 
-export const updateActivityPreset = async (presetId: number, presetData: any) => {
-  const response = await axios.put(`${API_ENDPOINT_BASE}/api/activity/presets/${presetId}/`, presetData);
+export const updateActivityPreset = async (csrfToken: string, presetId: number, presetData: any) => {
+  const response = await axios.put(`${API_ENDPOINT_BASE}/api/activity/presets/${presetId}/`, presetData, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
   return response.data
 }
 
-export const deleteActivityPreset = async (presetId: number) => {
-  const response = await axios.delete(`${API_ENDPOINT_BASE}/api/activity/presets/${presetId}/`);
+export const deleteActivityPreset = async (csrfToken: string, presetId: number) => {
+  const response = await axios.delete(`${API_ENDPOINT_BASE}/api/activity/presets/${presetId}/`, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
   return response.data
 }
 
-export const applyActivityPreset = async (presetId: number, activityData: any) => {
-  const response = await axios.post(`${API_ENDPOINT_BASE}/api/activity/presets/${presetId}/apply/`, { activity: activityData });
+export const applyActivityPreset = async (csrfToken: string, presetId: number, activityData: any) => {
+  const response = await axios.post(`${API_ENDPOINT_BASE}/api/activity/presets/${presetId}/apply/`, { activity: activityData }, {
+    headers: {
+      "X-CSRFToken": csrfToken
+    }
+  });
   return response.data
 }
 
