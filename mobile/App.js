@@ -89,6 +89,7 @@ export default function App() {
   };
 
   const handleLogout = async () => {
+    console.log('handleLogout triggered');
     setAuthenticated(false);
     setUsername('');
     setEmail('');
@@ -191,7 +192,7 @@ export default function App() {
             headerStyle: { backgroundColor: '#161a21' } 
           }}
         >
-          {() => <ProfileScreen onLogout={handleLogout} csrf={csrf} />}
+          {(props) => <ProfileScreen {...props} onLogout={handleLogout} csrf={csrf} />}
         </Tab.Screen>
       </Tab.Navigator>
     </NavigationContainer>

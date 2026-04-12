@@ -32,6 +32,9 @@ services:
       - DB_PASSWORD=REPLACE_WITH_YOUR_SUPABASE_PASSWORD
       - DB_HOST=aws-1-us-east-1.pooler.supabase.com
       - DB_PORT=6543
+      - CENTRIFUGO_TOKEN_SECRET=secret
+      - CENTRIFUGO_HTTP_API_KEY=api_key
+      - CENTRIFUGO_HTTP_API_ENDPOINT=http://centrifugo:8000
     depends_on:
       db:
         condition: service_healthy
@@ -50,19 +53,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-
-  frontend:
-    stdin_open: true
-    build: ./mobile
-    volumes:
-      - ./mobile:/usr/src/app
-    expose:
-      - 8081
-    environment:
-      - NODE_ENV=development
-      - CI=1
-    depends_on:
-      - backend
 
   centrifugo:
     image: centrifugo/centrifugo:v6
@@ -87,11 +77,10 @@ services:
       - 9000:80
     depends_on:
       - backend
-      - frontend
       - centrifugo
 
   redis:
-    image: redis:${REDIS_VERSION:-7}-alpine
+    image: redis:7-alpine
     ports:
       - "6379:6379"
     healthcheck:
@@ -115,14 +104,12 @@ services:
     image: grafana/grafana-oss:11.4.0
     depends_on:
       - prometheus
-    # Expose Grafana on host port 3000
     ports:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
-      # Mount local provisioning directory to automatically configure Prometheus as a datasource
       - ./grafana/provisioning:/etc/grafana/provisioning
       - grafana-data:/var/lib/grafana
 

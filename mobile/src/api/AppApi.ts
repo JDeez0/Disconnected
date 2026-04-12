@@ -29,7 +29,7 @@ export const register = async (csrfToken: string, username: string, email: strin
   return response.data
 }
 
-export const logout = async (csrfToken: string, deviceId: string) => {
+export const logout = async (csrfToken: string, deviceId: string = '') => {
   await axios.post(`${API_ENDPOINT_BASE}/api/logout/`, {
     'device_id': deviceId
   }, {
