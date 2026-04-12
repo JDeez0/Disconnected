@@ -2,13 +2,40 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, TextInput, TouchableOpacity, Text, ActivityIndicator, Alert, SafeAreaView } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 
-import { getCSRFToken, login } from './src/api/AppApi';
+import { getCSRFToken, login, register } from './src/api/AppApi';
 import HomeScreen from './src/screens/HomeScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import RoomDetailScreen from './src/screens/RoomDetailScreen';
 
-// Placeholder screens
+import { enableScreens } from 'react-native-screens';
+
+// Disable screens to avoid the Fabric 'expected boolean, got string' error
+enableScreens(false);
+
+const Tab = createBottomTabNavigator();
+const HomeStack = createStackNavigator();
+
+function HomeStackScreen({ route }) {
+  const { csrf } = route.params || {};
+  return (
+    <HomeStack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: '#161a21' },
+        headerTintColor: '#f1f1f1',
+        headerTitleStyle: { fontWeight: 'bold' },
+      }}
+    >
+      <HomeStack.Screen name="MyRoomsList" options={{ title: 'My Rooms' }}>
+        {(props) => <HomeScreen {...props} csrf={csrf} />}
+      </HomeStack.Screen>
+      <HomeStack.Screen name="RoomDetail" component={RoomDetailScreen} />
+    </HomeStack.Navigator>
+  );
+}
+
 function SearchScreen() {
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#161a21' }}>
@@ -17,16 +44,14 @@ function SearchScreen() {
   );
 }
 
-const Tab = createBottomTabNavigator();
-
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
-  const [userInfo, setUserInfo] = useState(null);
   const [csrf, setCsrf] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   
-  // Login form state
   const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   useEffect(() => {
@@ -42,36 +67,43 @@ export default function App() {
     }
   };
 
-  const handleLogin = async () => {
+  const handleAuth = async () => {
     if (!username || !password) {
       Alert.alert('Error', 'Please enter both username and password');
       return;
     }
     setLoading(true);
     try {
-      const data = await login(csrf, username, password);
-      setUserInfo(data);
+      if (isRegistering === true) {
+        await register(csrf, username, email, password);
+      } else {
+        await login(csrf, username, password);
+      }
       setAuthenticated(true);
     } catch (err) {
-      Alert.alert('Login Failed', err.response?.data?.detail || 'Invalid credentials');
+      console.error('Auth error:', err);
+      Alert.alert('Error', err.response?.data?.detail || 'Authentication failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setAuthenticated(false);
-    setUserInfo(null);
     setUsername('');
+    setEmail('');
     setPassword('');
+    setIsRegistering(false);
+    // Fetch a fresh token for the next session
+    await fetchCsrf();
   };
 
-  if (!authenticated) {
+  if (authenticated === false) {
     return (
       <SafeAreaView style={styles.loginContainer}>
         <View style={styles.loginContent}>
           <Text style={styles.title}>Disconnected</Text>
-          <Text style={styles.subtitle}>Native Messenger</Text>
+          <Text style={styles.subtitle}>{isRegistering === true ? 'Create Account' : 'Native Messenger'}</Text>
           
           <View style={styles.form}>
             <TextInput
@@ -82,20 +114,40 @@ export default function App() {
               onChangeText={setUsername}
               autoCapitalize="none"
             />
+            {isRegistering === true && (
+              <TextInput
+                style={styles.input}
+                placeholder="Email (optional)"
+                placeholderTextColor="#666"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+              />
+            )}
             <TextInput
               style={styles.input}
               placeholder="Password"
               placeholderTextColor="#666"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
+              secureTextEntry={true}
             />
             <TouchableOpacity 
               style={styles.button} 
-              onPress={handleLogin}
-              disabled={loading}
+              onPress={handleAuth}
+              disabled={loading === true}
             >
-              {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Login</Text>}
+              {loading === true ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{isRegistering === true ? 'Sign Up' : 'Login'}</Text>}
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.toggleButton} 
+              onPress={() => setIsRegistering(!isRegistering)}
+            >
+              <Text style={styles.toggleText}>
+                {isRegistering === true ? 'Already have an account? Login' : "Don't have an account? Sign up"}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -122,25 +174,25 @@ export default function App() {
           },
           tabBarActiveTintColor: '#3280b4',
           tabBarInactiveTintColor: '#d5d5d5',
-          headerStyle: {
-            backgroundColor: '#161a21',
-            elevation: 0,
-            shadowOpacity: 0,
-            borderBottomWidth: 1,
-            borderBottomColor: '#273247',
-          },
-          headerTintColor: '#f1f1f1',
-          headerTitleStyle: {
-            fontWeight: 'bold',
-          },
+          headerShown: false,
         })}
       >
-        <Tab.Screen name="My Rooms" component={HomeScreen} />
+        <Tab.Screen 
+          name="My Rooms" 
+          component={HomeStackScreen} 
+          initialParams={{ csrf }} 
+        />
         <Tab.Screen name="Discover" component={SearchScreen} />
         <Tab.Screen 
           name="Profile" 
-          children={() => <ProfileScreen onLogout={handleLogout} />} 
-        />
+          options={{ 
+            headerShown: true, 
+            headerTintColor: '#fff', 
+            headerStyle: { backgroundColor: '#161a21' } 
+          }}
+        >
+          {() => <ProfileScreen onLogout={handleLogout} csrf={csrf} />}
+        </Tab.Screen>
       </Tab.Navigator>
     </NavigationContainer>
   );
@@ -191,5 +243,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  toggleButton: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  toggleText: {
+    color: '#3280b4',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

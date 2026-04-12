@@ -1,13 +1,13 @@
 FROM node:20-slim
 
-# Install net-tools for troubleshooting
-RUN apt-get update && apt-get install -y iproute2 procps
+# Install system dependencies
+RUN apt-get update && apt-get install -y iproute2 procps curl
 
 WORKDIR /usr/src/app
 
 COPY package.json package-lock.json ./
 
-RUN npm install
+RUN npm install --force
 
 COPY . .
 
@@ -17,5 +17,5 @@ ENV CI=1
 # Expose the Expo port
 EXPOSE 8081
 
-# Start expo in web mode. Use --lan to allow network access.
+# Start expo in web mode.
 CMD ["npx", "expo", "start", "--web", "--port", "8081", "--lan"]

@@ -54,9 +54,8 @@ services:
   frontend:
     stdin_open: true
     build: ./mobile
-    # volumes:
-    #   - ./mobile:/usr/src/app
-    #   - /usr/src/app/node_modules
+    volumes:
+      - ./mobile:/usr/src/app
     expose:
       - 8081
     environment:
