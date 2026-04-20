@@ -413,8 +413,11 @@ class SubmitScreenTimeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        hours = request.data.get('hours', 0)
-        minutes = request.data.get('minutes', 0)
+        serializer = DailyScreenTimeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        hours = serializer.validated_data['hours']
+        minutes = serializer.validated_data['minutes']
         date = timezone.now().date()
 
         screen_time, created = DailyScreenTime.objects.update_or_create(

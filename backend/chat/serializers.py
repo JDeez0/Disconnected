@@ -291,6 +291,27 @@ class DailyScreenTimeSerializer(serializers.ModelSerializer):
         fields = ['id', 'hours', 'minutes', 'date', 'created_at', 'updated_at']
         read_only_fields = ['id', 'date', 'created_at', 'updated_at']
 
+    def validate_hours(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Hours cannot be negative.")
+        if value > 24:
+            raise serializers.ValidationError("Hours cannot exceed 24.")
+        return value
+
+    def validate_minutes(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Minutes cannot be negative.")
+        if value >= 60:
+            raise serializers.ValidationError("Minutes must be less than 60.")
+        return value
+
+    def validate(self, data):
+        hours = data.get('hours', 0)
+        minutes = data.get('minutes', 0)
+        if hours == 24 and minutes > 0:
+            raise serializers.ValidationError("Total time cannot exceed 24 hours.")
+        return data
+
 
 class LeaderboardEntrySerializer(serializers.Serializer):
     user_id = serializers.IntegerField()
